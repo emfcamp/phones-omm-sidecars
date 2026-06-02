@@ -1,0 +1,30 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "mitel_ommclient2"
+version = "0.0.1"
+authors = [
+  { name="clerie", email="hallo@clerie.de" },
+]
+description = "Another attempt for a modern client library to the Mitel OM Application XML Interface."
+readme = "README.md"
+license = { file="LICENSE" }
+requires-python = ">=3.7"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
+
+[project.optional-dependencies]
+crypt = [
+  "rsa",
+]
+
+[project.scripts]
+ommclient2 = "mitel_ommclient2.cli:main"
+
+[project.urls]
+"Source" = "https://git.clerie.de/clerie/mitel_ommclient2"
