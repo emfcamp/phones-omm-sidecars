@@ -3,11 +3,19 @@ name = "omm-sidecars"
 version = "0.1.0"
 description = "Sidecar services for the OpenMobility® Manager (OMM)"
 requires-python = ">=3.11"
-dependencies = []
+dependencies = [
+    "mitel-ommclient2",
+]
 
 [project.optional-dependencies]
-dev = ["pytest", "pytest-asyncio"]
+dev = ["pytest", "pytest-asyncio", "python-dotenv"]
 
 [build-system]
-requires = ["setuptools"]
-build-backend = "setuptools.backends._legacy:_Backend"
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.uv.sources]
+mitel-ommclient2 = { path = "mitel_ommclient2", editable = true }
+
+[project.scripts]
+omm-sidecars = "omm_sidecars.main:main"

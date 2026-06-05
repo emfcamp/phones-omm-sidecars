@@ -1,181 +1,157 @@
-#!/usr/bin/env python3
+"""AXI connection to OMM.
 
-import queue
-import select
+Manages TCP/TLS socket, null-byte framed XML message send/recv,
+and seq -> Future mapping for request/response correlation.
+"""
+from __future__ import annotations
+
+import asyncio
+import logging
 import socket
 import ssl
-import threading
 
 from . import messages
 
+logger = logging.getLogger(__name__)
+
+
+def _ssl_context() -> ssl.SSLContext:
+    """Create SSL context for OMM (self-signed certs)."""
+    ctx = ssl.create_default_context()
+    ctx.check_hostname = False
+    ctx.verify_mode = ssl.CERT_NONE
+    return ctx
+
+
 class Connection:
-    """
-        Establishes a connection to the OM Application XML Interface.
-        Uses a SSL connetion per default.
+    """AXI connection to OMM.
 
-        :param host: Hostname or IP address of OMM
-        :param port: Port of the OM Application XML plain TCP port
-        :param use_ssl: Whenever SSL should be used for the connetion
-        :param timeout: The timeout used for the connection
+    Manages a single TCP/TLS connection with:
+    - Null-byte terminated XML message framing
+    - seq -> Future mapping for request/response correlation
+    - Background recv loop
 
-        Usage::
-            >>> c = Connection("omm.local")
-            >>> c.connect()
-            >>> c.send(request)
-            >>> r = c.recv()
+    Usage::
+
+        async with Connection("omm.local") as conn:
+            resp = await conn.request(Ping())
     """
 
-    def __init__(self, host, port=12622, use_ssl=True, timeout=2):
+    def __init__(
+        self,
+        host: str,
+        port: int = 12622,
+        use_ssl: bool = True,
+        timeout: float = 10.0,
+    ) -> None:
         self._host = host
         self._port = port
+        self._use_ssl = use_ssl
+        self._timeout = timeout
 
-        tcp_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        tcp_socket.settimeout(timeout)
+        self._reader: asyncio.StreamReader | None = None
+        self._writer: asyncio.StreamWriter | None = None
+        self._seq: int = 0
+        self._pending: dict[int, asyncio.Future] = {}
+        self._write_lock = asyncio.Lock()
+        self._recv_task: asyncio.Task | None = None
 
-        if use_ssl:
-            ssl_context = ssl.SSLContext(protocol=ssl.PROTOCOL_TLSv1_2)
-            ssl_context.set_ciphers('DEFAULT')
+    async def connect(self) -> None:
+        """Open TCP+TLS connection to OMM."""
+        ssl_ctx = _ssl_context() if self._use_ssl else None
+        self._reader, self._writer = await asyncio.wait_for(
+            asyncio.open_connection(
+                self._host,
+                self._port,
+                ssl=ssl_ctx,
+                family=socket.AF_INET,
+            ),
+            timeout=self._timeout,
+        )
+        self._recv_task = asyncio.create_task(self._recv_loop())
 
-            self._socket = ssl_context.wrap_socket(tcp_socket, server_hostname=self._host)
-        else:
-            self._socket = tcp_socket
+    async def request(self, msg, timeout=None):
+        """Send request and wait for response.
 
-        self._close = False
-
-        self._seq = 0 # state of the sequence number generator
-        self._requests = {} # waiting area for pending responses
-
-
-    def connect(self):
+        :param msg: Request message object
+        :param timeout: Per-call timeout override
         """
-            Establishes the connection
-        """
+        timeout = timeout or self._timeout
+        seq = self._next_seq()
+        msg.seq = seq
 
-        self._socket.connect((self._host, self._port))
-        self._socket.setblocking(False)
+        future = asyncio.get_running_loop().create_future()
+        self._pending[seq] = future
 
-        threading.Thread(target=self._receive_loop, daemon=True).start()
+        async with self._write_lock:
+            self._writer.write(messages.construct(msg).encode("utf-8") + b"\0")
+            await self._writer.drain()
 
-    def _receive_loop(self):
-        """
-            Receives messages from socket and associates them to the responding request
+        try:
+            return await asyncio.wait_for(future, timeout=timeout)
+        finally:
+            self._pending.pop(seq, None)
 
-            This function is intended to be executed in thread.
-        """
-
-        recv_buffer = b""
-
-        while not self._close:
-            if select.select([self._socket], [], []) != ([], [], []):
-                # wait for data availiable
-                while True:
-                    try:
-                        # fill buffer with one message
-                        data = self._socket.recv(1024)
-                    except (BlockingIOError, ssl.SSLWantReadError):
-                        continue
-
-                    if not data:
-                        # buffer is empty
-                        break
-
-                    recv_buffer += data
-
-                    if b"\0" in recv_buffer:
-                        # there is a full message in buffer, handle that first
-                        break
-
-
-                if b"\0" not in recv_buffer:
-                    # no new messages
-                    break
-
-                # get one message from recv_buffer
-                message, buffer = recv_buffer.split(b"\0", 1)
-                recv_buffer = buffer
-
-                # parse the message
-                message = message.decode("utf-8")
-                response = messages.parse(message)
-
-                if response.seq in self._requests:
-                    # if this response belongs to a request, we return it and resolve the lock
-                    self._requests[response.seq]["response"] = response
-                    self._requests[response.seq]["event"].set()
-
-                # else the message will be ignored
-
-    def _generate_seq(self):
-        """
-            Returns new sequence number
-
-            This generates a number that tries to be unique during a session
-        """
-
+    def _next_seq(self) -> int:
         seq = self._seq
         self._seq += 1
         return seq
 
-    def request(self, request):
-        """
-            Sends a request, waits for response and return response
+    async def _recv_loop(self) -> None:
+        """Background: read null-byte terminated messages, dispatch to pending."""
+        buffer = b""
+        try:
+            while True:
+                data = await self._reader.read(4096)
+                if not data:
+                    logger.warning("connection closed by OMM")
+                    break
+                buffer += data
 
-            :param request: Request object
+                while b"\0" in buffer:
+                    msg_bytes, buffer = buffer.split(b"\0", 1)
+                    if not msg_bytes:
+                        continue
+                    try:
+                        response = messages.parse(msg_bytes.decode("utf-8"))
+                    except Exception:
+                        logger.exception("failed to parse message: %r", msg_bytes[:200])
+                        continue
 
-            Usage::
-                >>> r = c.request(mitel_ommclient2.messages.Ping())
-                >>> r.name
-                'PingResp'
-        """
+                    seq = getattr(response, "seq", None)
+                    if seq is not None and seq in self._pending:
+                        self._pending[seq].set_result(response)
+                    else:
+                        logger.debug("unsolicited message (seq=%s): %s", seq, response.name)
 
-        # generate new sequence number and attach to request
-        seq = self._generate_seq()
-        request.seq = seq
+        except asyncio.CancelledError:
+            pass
+        except Exception:
+            logger.exception("recv loop error")
+        finally:
+            for future in self._pending.values():
+                if not future.done():
+                    future.cancel()
+            self._pending.clear()
 
-        # add request to waiting area
-        self._requests[seq] = {
-            "event": threading.Event(),
-        }
+    async def close(self) -> None:
+        """Shut down recv loop and socket."""
+        if self._recv_task:
+            self._recv_task.cancel()
+            try:
+                await self._recv_task
+            except asyncio.CancelledError:
+                pass
+        if self._writer:
+            self._writer.close()
+            try:
+                await self._writer.wait_closed()
+            except Exception:
+                pass
 
-        # send request
-        message = messages.construct(request)
-        self._socket.send(message.encode("utf-8") + b"\0")
+    async def __aenter__(self):
+        await self.connect()
+        return self
 
-        # wait for response
-        self._requests[seq]["event"].wait()
-
-        # return reponse and remove from waiting area
-        return self._requests.pop(seq, {"response": None})["response"]
-
-    def close(self):
-        """
-            Shut down connection
-        """
-
-        self._close = True
-        return self._socket.close()
-
-    def __del__(self):
-        self.close()
-
-
-class SSLConnection(Connection):
-    """
-        Establishes a secure connection to the OM Application XML Interface
-
-        Please not that this class might be useless on your system since new
-        versions of OpenSSL don't ship with TLVv1.2 or lower anymore which are
-        the protocols supported by OMM.
-
-        :param host: Hostname or IP address of OMM
-        :param port: Port of the OM Application XML ssl TCP port
-
-        Usage:
-
-        See :class:`Connection`
-    """
-
-    def __init__(self, host, port=12622):
-        super().__init__(host, port)
-
-        self._socket = ssl.wrap_socket(self._socket)
+    async def __aexit__(self, *exc):
+        await self.close()
