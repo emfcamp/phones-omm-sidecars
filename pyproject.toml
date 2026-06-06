@@ -18,4 +18,4 @@ build-backend = "hatchling.build"
 mitel-ommclient2 = { path = "mitel_ommclient2", editable = true }
 
 [project.scripts]
-omm-sidecars = "omm_sidecars.main:main"
+dect-users = "omm_sidecars.dect_users:main"

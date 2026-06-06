@@ -206,6 +206,26 @@ class OMMClient2:
         r.raise_on_error()
         return r.enable
 
+    async def set_dect_auth_code(self, ac: str):
+        """Set the DECT subscription authentication code."""
+        m = messages.SetDECTAuthCode()
+        m.ac = ac
+        return await self.request(m)
+
+    async def set_dect_subscription_mode(self, mode: str, timeout: int = None):
+        """Set DECT subscription mode ('Configured', 'Wildcard', or 'Off')."""
+        m = messages.SetDECTSubscriptionMode()
+        m.mode = types.DECTSubscriptionModeType(mode)
+        if timeout is not None:
+            m.timeout = timeout
+        return await self.request(m)
+
+    async def set_dev_auto_create(self, enable: bool):
+        """Set whether device auto-creation on subscription is enabled."""
+        m = messages.SetDevAutoCreate()
+        m.enable = enable
+        return await self.request(m)
+
     # -- iterators --
 
     async def iter_pp_users(self, batch_size: int = 20):
