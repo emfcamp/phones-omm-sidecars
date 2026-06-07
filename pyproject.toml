@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "Sidecar services for the OpenMobility® Manager (OMM)"
 requires-python = ">=3.11"
 dependencies = [
-    "mitel-ommclient2",
+    "mitel-ommclient2[crypt]",
 ]
 
 [project.optional-dependencies]
