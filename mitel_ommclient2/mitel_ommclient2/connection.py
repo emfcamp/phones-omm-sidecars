@@ -7,12 +7,15 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 import socket
 import ssl
 
 from . import messages
 
 logger = logging.getLogger(__name__)
+
+READ_TIMEOUT = 22  # seconds — 150% of ping interval (15s)
 
 
 def _ssl_context() -> ssl.SSLContext:
@@ -102,7 +105,9 @@ class Connection:
         buffer = b""
         try:
             while True:
-                data = await self._reader.read(4096)
+                data = await asyncio.wait_for(
+                    self._reader.read(4096), timeout=READ_TIMEOUT
+                )
                 if not data:
                     logger.warning("connection closed by OMM")
                     break
@@ -124,8 +129,6 @@ class Connection:
                     else:
                         logger.debug("unsolicited message (seq=%s): %s", seq, response.name)
 
-        except asyncio.CancelledError:
-            pass
         except Exception:
             logger.exception("recv loop error")
         finally:
@@ -133,6 +136,11 @@ class Connection:
                 if not future.done():
                     future.cancel()
             self._pending.clear()
+
+        # Connection died (not cancelled by close()) — hard exit after
+        # giving other tasks 1s to notice via cancelled futures.
+        await asyncio.sleep(1)
+        os._exit(1)
 
     async def close(self) -> None:
         """Shut down recv loop and socket."""

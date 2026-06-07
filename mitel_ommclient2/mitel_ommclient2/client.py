@@ -1,6 +1,7 @@
 """Async OMM client."""
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import Any
 
@@ -12,6 +13,7 @@ from . import types
 logger = logging.getLogger(__name__)
 
 DEFAULT_TIMEOUT = 10.0
+PING_INTERVAL = 15  # seconds
 
 
 class OMMClient2:
@@ -51,6 +53,7 @@ class OMMClient2:
         self._timeout = timeout
         self._ommsync = ommsync
         self._conn: Connection | None = None
+        self._ping_task: asyncio.Task | None = None
         self.open_resp = None  #: OpenResp from the initial handshake
 
     async def connect(self) -> None:
@@ -70,6 +73,16 @@ class OMMClient2:
             m.UserDeviceSyncClient = "true"
         self.open_resp = await self._conn.request(m, self._timeout)
         self.open_resp.raise_on_error()
+        self._ping_task = asyncio.create_task(self._ping_loop())
+
+    async def _ping_loop(self) -> None:
+        """Send periodic pings to keep the connection alive."""
+        while True:
+            await asyncio.sleep(PING_INTERVAL)
+            try:
+                await self.ping()
+            except Exception:
+                logger.exception("ping failed")
 
     async def request(self, msg, timeout=None):
         """Send a request and wait for its response.
@@ -258,6 +271,13 @@ class OMMClient2:
 
     async def close(self) -> None:
         """Close connection."""
+        if self._ping_task:
+            self._ping_task.cancel()
+            try:
+                await self._ping_task
+            except asyncio.CancelledError:
+                pass
+            self._ping_task = None
         if self._conn:
             await self._conn.close()
             self._conn = None
