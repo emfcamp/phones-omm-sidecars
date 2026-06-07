@@ -2,8 +2,14 @@
 from __future__ import annotations
 
 import asyncio
+import base64
 import logging
 from typing import Any
+
+try:
+    import rsa
+except ImportError:
+    rsa = None
 
 from .connection import Connection
 from . import exceptions
@@ -54,6 +60,7 @@ class OMMClient2:
         self._ommsync = ommsync
         self._conn: Connection | None = None
         self._ping_task: asyncio.Task | None = None
+        self._rsa_pubkey = None  # cached rsa.PublicKey for encrypt()
         self.open_resp = None  #: OpenResp from the initial handshake
 
     async def connect(self) -> None:
@@ -106,7 +113,16 @@ class OMMClient2:
         """Get OMM's RSA public key for encrypting secrets."""
         r = await self.request(messages.GetPublicKey())
         r.raise_on_error()
-        return int(r.modulus, 16), int(r.exponent, 16)
+        return r
+
+    async def encrypt(self, secret: str) -> str:
+        """RSA-encrypt a secret for OMM (e.g. SIP password). Requires `rsa` extra."""
+        if rsa is None:
+            raise ImportError("rsa module is required: pip install mitel-ommclient2[crypt]")
+        if self._rsa_pubkey is None:
+            r = await self.get_publickey()
+            self._rsa_pubkey = rsa.PublicKey(int(r.modulus, 16), int(r.exponent, 16))
+        return base64.b64encode(rsa.encrypt(secret.encode(), self._rsa_pubkey)).decode()
 
     # -- DECT phone users --
 
