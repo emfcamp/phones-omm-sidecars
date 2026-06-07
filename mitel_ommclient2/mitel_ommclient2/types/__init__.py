@@ -114,6 +114,19 @@ class PPRelTypeType(EnumType):
     ]
 
 
+class SubscribeCmdType(ChildType):
+    FIELDS = {
+        "cmd": str,
+        "eventType": str,
+        "ppn": int,
+        "uid": int,
+        "rfpId": int,
+        "omm": int,
+        "trigger": str,
+        "scheme": str,
+    }
+
+
 class AccountType(ChildType):
     FIELDS = {
         "id": int,

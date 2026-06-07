@@ -134,6 +134,16 @@ def response_type(c):
     RESPONSE_TYPES[c.__name__] = c
     return c
 
+def event_type(c):
+    """Register an event as a response type (events are parsed like responses)."""
+    RESPONSE_TYPES[c.__name__] = c
+    return c
+
+
+class Event(Response):
+    """Event message type. Events don't have seq or errCode."""
+    BASE_FIELDS = {}
+
 from .createppuser import CreatePPUser, CreatePPUserResp
 from .deleteppdev import DeletePPDev, DeletePPDevResp
 from .deleteppuser import DeletePPUser, DeletePPUserResp
@@ -158,6 +168,9 @@ from .setdevautocreate import SetDevAutoCreate, SetDevAutoCreateResp
 from .setpp import SetPP, SetPPResp
 from .setppuser import SetPPUser, SetPPUserResp
 from .setppuserdevrelation import SetPPUserDevRelation, SetPPUserDevRelationResp
+from .subscribe import Subscribe, SubscribeResp
+from .eventppdevcnf import EventPPDevCnf
+from .eventpptransaction import EventPPTransaction
 
 def construct(request):
     """

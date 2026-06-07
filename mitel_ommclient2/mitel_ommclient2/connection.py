@@ -56,6 +56,7 @@ class Connection:
         self._writer: asyncio.StreamWriter | None = None
         self._seq: int = 0
         self._pending: dict[int, asyncio.Future] = {}
+        self._event_listeners: dict[str, asyncio.Queue] = {}
         self._write_lock = asyncio.Lock()
         self._recv_task: asyncio.Task | None = None
 
@@ -100,6 +101,18 @@ class Connection:
         self._seq += 1
         return seq
 
+    def register_listener(self, event_type: str) -> asyncio.Queue:
+        """Register a listener queue for an event type. Returns the queue."""
+        if event_type in self._event_listeners:
+            raise ValueError(f"already listening for {event_type}")
+        queue: asyncio.Queue = asyncio.Queue()
+        self._event_listeners[event_type] = queue
+        return queue
+
+    def unregister_listener(self, event_type: str) -> None:
+        """Remove a listener for an event type."""
+        self._event_listeners.pop(event_type, None)
+
     async def _recv_loop(self) -> None:
         """Background: read null-byte terminated messages, dispatch to pending."""
         buffer = b""
@@ -127,7 +140,11 @@ class Connection:
                     if seq is not None and seq in self._pending:
                         self._pending[seq].set_result(response)
                     else:
-                        logger.debug("unsolicited message (seq=%s): %s", seq, response.name)
+                        queue = self._event_listeners.get(response.name)
+                        if queue is not None:
+                            queue.put_nowait(response)
+                        else:
+                            logger.warning("unhandled unsolicited message (seq=%s): %s", seq, response.name)
 
         except Exception:
             logger.exception("recv loop error")

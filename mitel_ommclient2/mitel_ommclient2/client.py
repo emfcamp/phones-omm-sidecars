@@ -239,6 +239,49 @@ class OMMClient2:
         m.enable = enable
         return await self.request(m)
 
+    # -- event subscriptions --
+
+    async def subscribe(self, event_type: str, **filters):
+        """Subscribe to an event type. Filters: ppn, uid, rfpId, omm, trigger, scheme.
+
+        event_type is the spec's EventType name (e.g. "PPDevCnf", "PPState").
+        Use -1 for "all" on numeric filters, "*" for wildcard on string filters.
+        """
+        m = messages.Subscribe()
+        e = types.SubscribeCmdType()
+        e.cmd = "On"
+        e.eventType = event_type
+        for k, v in filters.items():
+            setattr(e, k, v)
+        m.childs.e = [e]
+        return await self.request(m)
+
+    async def unsubscribe(self, event_type: str, **filters):
+        """Unsubscribe from an event type."""
+        m = messages.Subscribe()
+        e = types.SubscribeCmdType()
+        e.cmd = "Off"
+        e.eventType = event_type
+        for k, v in filters.items():
+            setattr(e, k, v)
+        m.childs.e = [e]
+        return await self.request(m)
+
+    async def events(self, event_type: str):
+        """Async iterator over events of a given type. One listener per event_type.
+
+        event_type is the base name (e.g. "PPDevCnf") — the same name used in
+        subscribe(). Events arrive on the wire with an "Event" prefix which is
+        added automatically.
+        """
+        wire_name = f"Event{event_type}"
+        queue = self._conn.register_listener(wire_name)
+        try:
+            while True:
+                yield await queue.get()
+        finally:
+            self._conn.unregister_listener(wire_name)
+
     # -- iterators --
 
     async def iter_pp_users(self, batch_size: int = 20):
