@@ -23,6 +23,8 @@ from mitel_ommclient2.client import OMMClient2
 from mitel_ommclient2.messages import EventPPCnf, EventPPDevCnf
 from mitel_ommclient2 import types
 
+from omm_sidecars import sip
+
 logging.basicConfig(level=os.environ.get("LOG_LEVEL", "INFO").upper())
 log = logging.getLogger(__name__)
 
@@ -102,6 +104,19 @@ async def _main() -> None:
     host = os.environ["OMM_HOST"]
     user = os.environ.get("OMM_USER", "admin")
     password = os.environ["OMM_PASS"]
+
+    # Start SIP endpoint if configured
+    if sip_server := os.environ.get("SIP_SERVER"):
+        sip_port = int(os.environ.get("SIP_PORT", "5060"))
+        sip_username = os.environ["SIP_USERNAME"]
+        sip_password = os.environ["SIP_PASSWORD"]
+        sip_my_ip = os.environ.get("SIP_MY_IP", "10.26.10.50")
+        log.info(
+            "starting SIP endpoint as %s@%s:%d", sip_username, sip_server, sip_port
+        )
+        sip.create_sip_endpoint(
+            sip_server, sip_port, sip_username, sip_password, my_ip=sip_my_ip
+        )
 
     log.info("connecting to %s", host)
     async with OMMClient2(host, user, password, ommsync=True) as client:
