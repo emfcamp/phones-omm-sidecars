@@ -140,8 +140,10 @@ class Connection:
                     buffer = parts[1]
                     if not msg_bytes:
                         continue
+                    xml = msg_bytes.decode("utf-8")
+                    logger.debug("incoming: %s", xml)
                     try:
-                        response = messages.parse(msg_bytes.decode("utf-8"))
+                        response = messages.parse(xml)
                     except Exception:
                         logger.exception("failed to parse message: %r", msg_bytes[:200])
                         continue
