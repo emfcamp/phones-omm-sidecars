@@ -1,17 +1,18 @@
 #!/usr/bin/env python3
 
-from . import Request, Response, request_type, response_type
+from dataclasses import dataclass
+from . import Request, Response, axi_parsable
 from ..types import DECTSubscriptionModeType
 
 
-@request_type
-class SetDECTSubscriptionMode(Request):
-    FIELDS = {
-        "mode": DECTSubscriptionModeType,
-        "timeout": int,  # timeout only for wildcard mode
-    }
-
-
-@response_type
+@axi_parsable
+@dataclass
 class SetDECTSubscriptionModeResp(Response):
-    FIELDS = {}
+    pass
+
+
+@axi_parsable
+@dataclass
+class SetDECTSubscriptionMode(Request[SetDECTSubscriptionModeResp]):
+    mode: DECTSubscriptionModeType | None = None
+    timeout: int | None = None

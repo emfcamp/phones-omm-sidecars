@@ -1,18 +1,19 @@
 #!/usr/bin/env python3
 
-from . import Request, Response, request_type, response_type
+from dataclasses import dataclass
+from . import Request, Response, axi_parsable
 
 
-@request_type
-class GetRFPSummary(Request):
-    FIELDS = {}
-
-
-@response_type
+@axi_parsable
+@dataclass
 class GetRFPSummaryResp(Response):
-    FIELDS = {
-        "nRFPs": int,
-        "nConnected": int,
-        "DECTactivatedRFPs": int,
-        "DECTactiveRFPs": int,
-    }
+    nRFPs: int = 0
+    nConnected: int = 0
+    DECTactivatedRFPs: int | None = None
+    DECTactiveRFPs: int | None = None
+
+
+@axi_parsable
+@dataclass
+class GetRFPSummary(Request[GetRFPSummaryResp]):
+    pass

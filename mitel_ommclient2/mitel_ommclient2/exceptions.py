@@ -1,21 +1,26 @@
 #!/usr/bin/env python3
 
-exception_classes = {}
+from typing import TYPE_CHECKING
 
-def _collect_exception_class(c):
-    """
-        Decorator that collects exception classes for parsing error codes.
-    """
-    exception_classes[c.__name__] = c
-    return c
+if TYPE_CHECKING:
+    from .messages import Response
 
 
 class OMResponseException(Exception):
-    def __init__(self, response, msg=None):
+    def __init__(self, response: "Response", msg: str | None = None):
         self.response = response
         if msg is None:
             msg = self.response.info
         super().__init__(msg)
+
+
+exception_classes: dict[str, type[OMResponseException]] = {}
+
+
+def _collect_exception_class(c: type[OMResponseException]) -> type[OMResponseException]:
+    """Decorator that collects exception classes for parsing error codes."""
+    exception_classes[c.__name__] = c
+    return c
 
 
 @_collect_exception_class
@@ -60,7 +65,7 @@ class EInProgress(OMResponseException):
 
 @_collect_exception_class
 class EInval(OMResponseException):
-    def __init__(self, response):
+    def __init__(self, response: "Response"):
         super().__init__(response, response.bad)
 
 
@@ -86,7 +91,7 @@ class ELicenseWrongInstallId(OMResponseException):
 
 @_collect_exception_class
 class EMissing(OMResponseException):
-    def __init__(self, response):
+    def __init__(self, response: "Response"):
         super().__init__(response, response.bad)
 
 
@@ -147,8 +152,8 @@ class EPwUnchanged(OMResponseException):
 
 @_collect_exception_class
 class ETooLong(OMResponseException):
-    def __init__(self, response):
-        super().__init__(response, response.bad + ", maximum of " + str(response.maxLen))
+    def __init__(self, response: "Response"):
+        super().__init__(response, f"{response.bad}, maximum of {response.maxLen}")
 
 
 @_collect_exception_class

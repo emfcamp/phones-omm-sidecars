@@ -1,17 +1,16 @@
 #!/usr/bin/env python3
 
-from . import Request, Response, request_type, response_type
+from dataclasses import dataclass
+from . import Request, Response, axi_parsable
 
 
-@request_type
-class Ping(Request):
-    FIELDS = {
-        "timeStamp": int,
-    }
-
-
-@response_type
+@axi_parsable
+@dataclass
 class PingResp(Response):
-    FIELDS = {
-        "timeStamp": int,
-    }
+    timeStamp: int | None = None
+
+
+@axi_parsable
+@dataclass
+class Ping(Request[PingResp]):
+    timeStamp: int | None = None

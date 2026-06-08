@@ -1,63 +1,15 @@
 #!/usr/bin/env python3
 
-class ChildType:
-    """
-        Base type class
+from dataclasses import dataclass
 
-        :param name: Name of the message
-        :param attrs: Message attributes
-        :param childs: Message children
-    """
 
-    FIELDS = {}
-
-    def __init__(self, attrs={}):
-        self._attrs = {}
-
-        if self.FIELDS is not None:
-            for k, v in attrs.items():
-                setattr(self, k, v)
-        else:
-            # don't check attrs for types we do have any information
-            self._attrs = attrs
-
-    def __getattr__(self, name):
-        if name in self.FIELDS.keys():
-            return self._attrs.get(name)
-        else:
-            raise AttributeError()
-
-    def __setattr__(self, name, value):
-        if name in self.FIELDS.keys():
-            if self.FIELDS[name] is not None and type(value) != self.FIELDS[name]:
-                raise TypeError()
-            self._attrs[name] = value
-        else:
-            object.__setattr__(self, name, value)
-
-    def __repr__(self):
-        return "{}({})".format(self.__class__.__name__, repr(self._attrs))
-
-def cast_dict_to_childtype(t, d):
-    errors = {} # collect unknown keys
-    for k, v in d.items():
-        if k in t.FIELDS.keys():
-            if t.FIELDS[k] is not None and type(v) != t.FIELDS[k]:
-                d[k] = t.FIELDS[k](v)
-        else:
-            errors[k] = v
-
-    if errors != {}:
-        raise KeyError("The following keys are unknown for '{}': {}".format(t.__name__, errors))
-
-    return t(d)
+# -- enums --
 
 
 class EnumType:
+    VALUES: list[str] | None = []
 
-    VALUES = [] # Allowed values
-
-    def __init__(self, s):
+    def __init__(self, s: str):
         if self.VALUES is not None:
             if s in self.VALUES:
                 self.value = s
@@ -66,32 +18,22 @@ class EnumType:
         else:
             self.value = s
 
-    def __str__(self):
+    def __str__(self) -> str:
         return str(self.value)
 
-    def __repr__(self):
-        return "{}({})".format(self.__class__.__name__, repr(self.value))
+    def __repr__(self) -> str:
+        return f"{self.__class__.__name__}({self.value!r})"
 
-    def __eq__(self, other):
+    def __eq__(self, other: object) -> bool:
         return isinstance(other, type(self)) and self.value == other.value
 
 
 class CallForwardStateType(EnumType):
-    VALUES = [
-        "Off",
-        "Busy",
-        "NoAnswer",
-        "BusyNoAnswer",
-        "All",
-    ]
+    VALUES = ["Off", "Busy", "NoAnswer", "BusyNoAnswer", "All"]
 
 
 class DECTSubscriptionModeType(EnumType):
-    VALUES = [
-        "Wildcard",
-        "Configured",
-        "Off",
-    ]
+    VALUES = ["Wildcard", "Configured", "Off"]
 
 
 class DECTSubscriptionStateType(EnumType):
@@ -107,171 +49,167 @@ class MonitoringStateType(EnumType):
 
 
 class PPRelTypeType(EnumType):
-    VALUES = [
-        "Fixed",
-        "Dynamic",
-        "Unbound",
-    ]
+    VALUES = ["Fixed", "Dynamic", "Unbound"]
 
 
-class SubscribeCmdType(ChildType):
-    FIELDS = {
-        "cmd": str,
-        "eventType": str,
-        "ppn": int,
-        "uid": int,
-        "rfpId": int,
-        "omm": int,
-        "trigger": str,
-        "scheme": str,
-    }
+# -- child types (dataclasses) --
 
 
-class AccountType(ChildType):
-    FIELDS = {
-        "id": int,
-        "username": str,
-        "password": str,
-        "oldPassword": str,
-        "permission": None,
-        "active": bool,
-        "aging": None,
-        "expire": int,
-        "state": str,
-    }
+@dataclass
+class SubscribeCmdType:
+    cmd: str = ""
+    eventType: str = ""
+    ppn: int | None = None
+    uid: int | None = None
+    rfpId: int | None = None
+    omm: int | None = None
+    trigger: str | None = None
+    scheme: str | None = None
 
 
-class PPDevType(ChildType):
-    FIELDS = {
-        "ppn": int,
-        "timeStamp": int,
-        "relType": PPRelTypeType,
-        "uid": int,
-        "ipei": str,
-        "ac": str,
-        "s": DECTSubscriptionStateType,
-        "uak": str,
-        "encrypt": bool,
-        "capMessaging": bool,
-        "capMessagingForInternalUse": bool,
-        "capEnhLocating": bool,
-        "capBluetooth": bool,
-        "ethAddr": str,
-        "hwType": str,
-        "ppProfileCapability": bool,
-        "ppDefaultProfileLoaded": bool,
-        "subscribeToPARIOnly": bool,
-        # undocumented
-        "ommId": str,
-        "ommIdAck": str,
-        "timeStampAdmin": int,
-        "timeStampRelation": int,
-        "timeStampRoaming": int,
-        "timeStampSubscription": int,
-        "autoCreate": bool,
-        "roaming": None, # value: 'RoamingComplete'
-        "modicType": str, # value: '01'
-        "locationData": str, # value: '000001000000'
-        "dectIeFixedId": str,
-        "subscriptionId": str,
-        "ppnSec": int,
-    }
+@dataclass
+class AccountType:
+    id: int = 0
+    username: str = ""
+    password: str = ""
+    oldPassword: str = ""
+    active: bool = False
+    expire: int | None = None
+    state: str = ""
 
 
-class RFPStatNameType(ChildType):
-    FIELDS = {
-        "elemId": int,
-        "group": str,
-        "name": str,
-    }
+@dataclass
+class PPDevType:
+    ppn: int = 0
+    timeStamp: int | None = None
+    relType: PPRelTypeType | None = None
+    uid: int | None = None
+    ipei: str | None = None
+    ac: str | None = None
+    s: DECTSubscriptionStateType | None = None
+    uak: str | None = None
+    encrypt: bool | None = None
+    capMessaging: bool | None = None
+    capMessagingForInternalUse: bool | None = None
+    capEnhLocating: bool | None = None
+    capBluetooth: bool | None = None
+    ethAddr: str | None = None
+    hwType: str | None = None
+    ppProfileCapability: bool | None = None
+    ppDefaultProfileLoaded: bool | None = None
+    subscribeToPARIOnly: bool | None = None
+    ommId: str | None = None
+    ommIdAck: str | None = None
+    timeStampAdmin: int | None = None
+    timeStampRelation: int | None = None
+    timeStampRoaming: int | None = None
+    timeStampSubscription: int | None = None
+    autoCreate: bool | None = None
+    modicType: str | None = None
+    locationData: str | None = None
+    dectIeFixedId: str | None = None
+    subscriptionId: str | None = None
+    ppnSec: int | None = None
 
 
-class RFPStatDataType(ChildType):
-    FIELDS = {
-        "id": int,
-        "counter": str,
-    }
+@dataclass
+class RFPStatNameType:
+    elemId: int = 0
+    group: str = ""
+    name: str = ""
 
 
-class PPUserType(ChildType):
-    FIELDS = {
-        "uid": int,
-        "timeStamp": int,
-        "relType": PPRelTypeType,
-        "ppn": int,
-        "name": str,
-        "num": str,
-        "hierarchy1": str,
-        "hierarchy2": str,
-        "addId": str,
-        "pin": str,
-        "sipAuthId": str,
-        "sipPw": str,
-        "sosNum": str,
-        "voiceboxNum": str,
-        "manDownNum": str,
-        "forwardState": CallForwardStateType,
-        "forwardTime": int,
-        "forwardDest": str,
-        "langPP": LanguageType,
-        "holdRingBackTime": int,
-        "autoAnswer": str,
-        "microphoneMute": str,
-        "warningTone": str,
-        "allowBargeIn": str,
-        "callWaitingDisabled": bool,
-        "external": bool,
-        "trackingActive": bool,
-        "locatable": bool,
-        "BTlocatable": bool,
-        "BTsensitivity": str,
-        "locRight": bool,
-        "msgRight": bool,
-        "sendVcardRight": bool,
-        "recvVcardRight": bool,
-        "keepLocalPB": bool,
-        "vip": bool,
-        "sipRegisterCheck": bool,
-        "allowVideoStream": bool,
-        "conferenceServerType": str,
-        "conferenceServerURI": str,
-        "monitoringMode": str,
-        "CUS": MonitoringStateType,
-        "HAS": MonitoringStateType,
-        "HSS": MonitoringStateType,
-        "HRS": MonitoringStateType,
-        "HCS": MonitoringStateType,
-        "SRS": MonitoringStateType,
-        "SCS": MonitoringStateType,
-        "CDS": MonitoringStateType,
-        "HBS": MonitoringStateType,
-        "BTS": MonitoringStateType,
-        "SWS": MonitoringStateType,
-        "credentialPw": str,
-        "configurationDataLoaded": bool,
-        "ppData": str,
-        "ppProfileId": int,
-        "fixedSipPort": int,
-        "calculatedSipPort": int,
-        # undocumented
-        "uidSec": int,
-        "permanent": bool,
-        "lang": None,
-        "autoLogoutOnCharge": bool,
-        "hotDeskingSupport": bool,
-        "authenticateLogout": bool,
-        "useSIPUserName": None,
-        "useSIPUserAuthentication": None,
-        "serviceUserName": None,
-        "serviceAuthName": None,
-        "serviceAuthPassword": None,
-        "keyLockEnable": None,
-        "keyLockPin": None,
-        "keyLockTime": None,
-        "ppnOld": int,
-        "timeStampAdmin": int,
-        "timeStampRelation": int,
-        "altDisplayNum": str,
-        "sipProfileId": int,
-        "pickupGroupNum": str,
-    }
+@dataclass
+class RFPType:
+    """Stub — RFPType has many fields depending on OMM version."""
+
+    id: int = 0
+    ethAddr: str = ""
+    dectOn: bool = False
+    name: str = ""
+
+
+@dataclass
+class RFPStatHeadType:
+    numElemPerRec: int = 0
+    recordSets: int = 0
+    resolution: str = ""
+
+
+@dataclass
+class RFPStatDataType:
+    id: int = 0
+    counter: str = ""
+
+
+@dataclass
+class PPUserType:
+    uid: int = 0
+    timeStamp: int | None = None
+    relType: PPRelTypeType | None = None
+    ppn: int | None = None
+    name: str | None = None
+    num: str | None = None
+    hierarchy1: str | None = None
+    hierarchy2: str | None = None
+    addId: str | None = None
+    pin: str | None = None
+    sipAuthId: str | None = None
+    sipPw: str | None = None
+    sosNum: str | None = None
+    voiceboxNum: str | None = None
+    manDownNum: str | None = None
+    forwardState: CallForwardStateType | None = None
+    forwardTime: int | None = None
+    forwardDest: str | None = None
+    langPP: LanguageType | None = None
+    holdRingBackTime: int | None = None
+    autoAnswer: str | None = None
+    microphoneMute: str | None = None
+    warningTone: str | None = None
+    allowBargeIn: str | None = None
+    callWaitingDisabled: bool | None = None
+    external: bool | None = None
+    trackingActive: bool | None = None
+    locatable: bool | None = None
+    BTlocatable: bool | None = None
+    BTsensitivity: str | None = None
+    locRight: bool | None = None
+    msgRight: bool | None = None
+    sendVcardRight: bool | None = None
+    recvVcardRight: bool | None = None
+    keepLocalPB: bool | None = None
+    vip: bool | None = None
+    sipRegisterCheck: bool | None = None
+    allowVideoStream: bool | None = None
+    conferenceServerType: str | None = None
+    conferenceServerURI: str | None = None
+    monitoringMode: str | None = None
+    CUS: MonitoringStateType | None = None
+    HAS: MonitoringStateType | None = None
+    HSS: MonitoringStateType | None = None
+    HRS: MonitoringStateType | None = None
+    HCS: MonitoringStateType | None = None
+    SRS: MonitoringStateType | None = None
+    SCS: MonitoringStateType | None = None
+    CDS: MonitoringStateType | None = None
+    HBS: MonitoringStateType | None = None
+    BTS: MonitoringStateType | None = None
+    SWS: MonitoringStateType | None = None
+    credentialPw: str | None = None
+    configurationDataLoaded: bool | None = None
+    ppData: str | None = None
+    ppProfileId: int | None = None
+    fixedSipPort: int | None = None
+    calculatedSipPort: int | None = None
+    uidSec: int | None = None
+    permanent: bool | None = None
+    autoLogoutOnCharge: bool | None = None
+    hotDeskingSupport: bool | None = None
+    authenticateLogout: bool | None = None
+    ppnOld: int | None = None
+    timeStampAdmin: int | None = None
+    timeStampRelation: int | None = None
+    altDisplayNum: str | None = None
+    sipProfileId: int | None = None
+    pickupGroupNum: str | None = None

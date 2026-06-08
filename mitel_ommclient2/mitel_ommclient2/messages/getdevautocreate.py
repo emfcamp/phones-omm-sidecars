@@ -1,15 +1,16 @@
 #!/usr/bin/env python3
 
-from . import Request, Response, request_type, response_type
+from dataclasses import dataclass
+from . import Request, Response, axi_parsable
 
 
-@request_type
-class GetDevAutoCreate(Request):
-    FIELDS = {}
-
-
-@response_type
+@axi_parsable
+@dataclass
 class GetDevAutoCreateResp(Response):
-    FIELDS = {
-        "enable": bool,
-    }
+    enable: bool = False
+
+
+@axi_parsable
+@dataclass
+class GetDevAutoCreate(Request[GetDevAutoCreateResp]):
+    pass

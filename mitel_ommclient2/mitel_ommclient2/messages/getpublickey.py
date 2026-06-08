@@ -1,16 +1,17 @@
 #!/usr/bin/env python3
 
-from . import Request, Response, request_type, response_type
+from dataclasses import dataclass
+from . import Request, Response, axi_parsable
 
 
-@request_type
-class GetPublicKey(Request):
-    pass
-
-
-@response_type
+@axi_parsable
+@dataclass
 class GetPublicKeyResp(Response):
-    FIELDS = {
-        "modulus": str,
-        "exponent": str,
-    }
+    modulus: str = ""
+    exponent: str = ""
+
+
+@axi_parsable
+@dataclass
+class GetPublicKey(Request[GetPublicKeyResp]):
+    pass

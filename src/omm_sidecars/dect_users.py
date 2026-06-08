@@ -4,12 +4,14 @@ Runs a keep-alive loop that ensures DECT subscription settings are correct:
 auth code is "0000", auto-create is enabled, subscription mode is Configured.
 Re-applies if changed externally (e.g. via web UI).
 """
+
 import asyncio
 import logging
 import os
 
 try:
     from dotenv import load_dotenv
+
     load_dotenv()
 except ImportError:
     pass

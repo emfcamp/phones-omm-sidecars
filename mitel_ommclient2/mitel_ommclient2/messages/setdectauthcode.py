@@ -1,15 +1,16 @@
 #!/usr/bin/env python3
 
-from . import Request, Response, request_type, response_type
+from dataclasses import dataclass
+from . import Request, Response, axi_parsable
 
 
-@request_type
-class SetDECTAuthCode(Request):
-    FIELDS = {
-        "ac": str,  # Authentication Code
-    }
-
-
-@response_type
+@axi_parsable
+@dataclass
 class SetDECTAuthCodeResp(Response):
-    FIELDS = {}
+    pass
+
+
+@axi_parsable
+@dataclass
+class SetDECTAuthCode(Request[SetDECTAuthCodeResp]):
+    ac: str = ""

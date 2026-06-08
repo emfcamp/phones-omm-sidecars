@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 
-from . import Event, event_type
+from dataclasses import dataclass
+from . import Event, axi_parsable
 
 
-@event_type
+@axi_parsable
+@dataclass
 class EventPPTransaction(Event):
-    FIELDS = {
-        "trType": str,
-        "ppn": int,
-        "rfpId": int,
-    }
+    trType: str | None = None
+    ppn: int | None = None
+    rfpId: int | None = None

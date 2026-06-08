@@ -1,22 +1,20 @@
 #!/usr/bin/env python3
 
-from . import Request, Response, request_type, response_type
+from dataclasses import dataclass, field
+from . import Request, Response, axi_parsable
+from ..types import RFPType
 
 
-@request_type
-class GetRFP(Request):
-    FIELDS = {
-        "id": int,
-        "maxRecords": int,
-        "withState": str,
-        "withDetails": str,
-    }
-
-
-@response_type
+@axi_parsable
+@dataclass
 class GetRFPResp(Response):
-    # RFP records have many optional/undocumented fields depending on OMM version;
-    # kept as raw dicts to avoid strict field validation failures.
-    CHILDS = {
-        "rfp": None,
-    }
+    rfp: list[RFPType] = field(default_factory=list)
+
+
+@axi_parsable
+@dataclass
+class GetRFP(Request[GetRFPResp]):
+    id: int = 0
+    maxRecords: int | None = None
+    withState: str | None = None
+    withDetails: str | None = None

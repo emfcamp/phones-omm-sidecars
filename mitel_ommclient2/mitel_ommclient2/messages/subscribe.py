@@ -1,18 +1,17 @@
 #!/usr/bin/env python3
 
-from . import Request, Response, request_type, response_type
+from dataclasses import dataclass, field
+from . import Request, Response, axi_parsable
 from ..types import SubscribeCmdType
 
 
-@request_type
-class Subscribe(Request):
-    CHILDS = {
-        "e": SubscribeCmdType,
-    }
-
-
-@response_type
+@axi_parsable
+@dataclass
 class SubscribeResp(Response):
-    FIELDS = {
-        "eventType": str,
-    }
+    eventType: str | None = None
+
+
+@axi_parsable
+@dataclass
+class Subscribe(Request[SubscribeResp]):
+    e: list[SubscribeCmdType] = field(default_factory=list)

@@ -1,22 +1,23 @@
 """Async OMM client."""
+
 from __future__ import annotations
 
 import asyncio
 import base64
 import logging
-from typing import Any
+from typing import AsyncGenerator, TypeVar
 
-try:
-    import rsa
-except ImportError:
-    rsa = None
+import rsa
 
 from .connection import Connection
 from . import exceptions
 from . import messages
+from .messages import Request, RespT, OpenResp
 from . import types
 
 logger = logging.getLogger(__name__)
+
+EventT = TypeVar("EventT", bound=messages.Event)
 
 DEFAULT_TIMEOUT = 10.0
 PING_INTERVAL = 15  # seconds
@@ -59,27 +60,32 @@ class OMMClient2:
         self._timeout = timeout
         self._ommsync = ommsync
         self._conn: Connection | None = None
-        self._ping_task: asyncio.Task | None = None
-        self._rsa_pubkey = None  # cached rsa.PublicKey for encrypt()
-        self.open_resp = None  #: OpenResp from the initial handshake
+        self._ping_task: asyncio.Task[None] | None = None
+        self._rsa_pubkey: rsa.PublicKey | None = None  # cached for encrypt()
+        self._open_resp: OpenResp | None = None
+
+    @property
+    def open_resp(self) -> OpenResp:
+        """OpenResp from the initial handshake. Fails if not connected."""
+        assert self._open_resp is not None, "not connected"
+        return self._open_resp
 
     async def connect(self) -> None:
         """Open connection and authenticate."""
-        self._conn = Connection(
-            self._host, self._port, self._use_ssl, self._timeout
-        )
+        self._conn = Connection(self._host, self._port, self._use_ssl, self._timeout)
         await self._conn.connect()
         await self._open_session()
 
     async def _open_session(self) -> None:
         """Send Open to authenticate with OMM."""
-        m = messages.Open()
-        m.username = self._username
-        m.password = self._password
-        if self._ommsync:
-            m.UserDeviceSyncClient = "true"
-        self.open_resp = await self._conn.request(m, self._timeout)
-        self.open_resp.raise_on_error()
+        assert self._conn is not None
+        m = messages.Open(
+            username=self._username,
+            password=self._password,
+            UserDeviceSyncClient="true" if self._ommsync else None,
+        )
+        self._open_resp = await self._conn.request(m, self._timeout)
+        self._open_resp.raise_on_error()
         self._ping_task = asyncio.create_task(self._ping_loop())
 
     async def _ping_loop(self) -> None:
@@ -91,17 +97,18 @@ class OMMClient2:
             except Exception:
                 logger.exception("ping failed")
 
-    async def request(self, msg, timeout=None):
+    async def request(self, msg: Request[RespT], timeout: float | None = None) -> RespT:
         """Send a request and wait for its response.
 
         :param msg: Request message object
         :param timeout: Per-call timeout override, uses default if None
         """
+        assert self._conn is not None
         return await self._conn.request(msg, timeout or self._timeout)
 
     # -- basic requests --
 
-    async def ping(self):
+    async def ping(self) -> bool:
         """Is OMM still there?
 
         Returns True when response is received.
@@ -116,9 +123,7 @@ class OMMClient2:
         return r
 
     async def encrypt(self, secret: str) -> str:
-        """RSA-encrypt a secret for OMM (e.g. SIP password). Requires `rsa` extra."""
-        if rsa is None:
-            raise ImportError("rsa module is required: pip install mitel-ommclient2[crypt]")
+        """RSA-encrypt a secret for OMM (e.g. SIP password)."""
         if self._rsa_pubkey is None:
             r = await self.get_publickey()
             self._rsa_pubkey = rsa.PublicKey(int(r.modulus, 16), int(r.exponent, 16))
@@ -126,39 +131,29 @@ class OMMClient2:
 
     # -- DECT phone users --
 
-    async def get_pp_user(self, uid: int, max_records: int = None):
+    async def get_pp_user(self, uid: int, max_records: int | None = None):
         """Get one or more DECT phone users starting at uid."""
-        m = messages.GetPPUser()
-        m.uid = uid
-        if max_records is not None:
-            m.maxRecords = max_records
+        m = messages.GetPPUser(uid=uid, maxRecords=max_records)
         return await self.request(m)
 
     async def set_pp_user(self, user: types.PPUserType):
         """Patch a DECT phone user. uid identifies the record, other fields are what to change."""
-        m = messages.SetPPUser()
-        m.childs.user = [user]
+        m = messages.SetPPUser(user=[user])
         return await self.request(m)
 
-    async def create_pp_user(self, user: types.PPUserType = None):
+    async def create_pp_user(self, user: types.PPUserType):
         """Create a DECT phone user. OMM picks uid if not set."""
-        m = messages.CreatePPUser()
-        if user is not None:
-            m.childs.user = [user]
+        m = messages.CreatePPUser(user=[user])
         return await self.request(m)
 
-    async def delete_pp_user(self, uid: int = None, num: str = None):
+    async def delete_pp_user(self, uid: int | None = None, num: str | None = None):
         """Delete a DECT phone user by uid or num."""
-        m = messages.DeletePPUser()
-        if uid is not None:
-            m.uid = uid
-        if num is not None:
-            m.num = num
+        m = messages.DeletePPUser(uid=uid, num=num)
         return await self.request(m)
 
     # -- DECT phone devices --
 
-    async def get_pp_dev(self, ppn: int, max_records: int = None):
+    async def get_pp_dev(self, ppn: int, max_records: int | None = None):
         """Get one or more DECT phone devices starting at ppn."""
         m = messages.GetPPDev()
         m.ppn = ppn
@@ -176,60 +171,42 @@ class OMMClient2:
 
     async def bind_user_device(self, uid: int, ppn: int, rel_type: str = "Dynamic"):
         """Bind a user to a device. Requires ommsync."""
-        user = types.PPUserType()
-        user.uid = uid
-        user.ppn = ppn
-        user.relType = types.PPRelTypeType(rel_type)
-
-        pp = types.PPDevType()
-        pp.ppn = ppn
-        pp.uid = uid
-        pp.relType = types.PPRelTypeType(rel_type)
-
-        m = messages.SetPP()
-        m.childs.user = [user]
-        m.childs.pp = [pp]
+        rel = types.PPRelTypeType(rel_type)
+        user = types.PPUserType(uid=uid, ppn=ppn, relType=rel)
+        pp = types.PPDevType(ppn=ppn, uid=uid, relType=rel)
+        m = messages.SetPP(user=[user], pp=[pp])
         return await self.request(m)
 
     async def unbind_user_device(self, uid: int, ppn: int):
         """Unbind a user from a device. Requires ommsync."""
-        user = types.PPUserType()
-        user.uid = uid
-        user.ppn = 0
-        user.relType = types.PPRelTypeType("Unbound")
-
-        pp = types.PPDevType()
-        pp.ppn = ppn
-        pp.uid = 0
-        pp.relType = types.PPRelTypeType("Unbound")
-
-        m = messages.SetPP()
-        m.childs.user = [user]
-        m.childs.pp = [pp]
+        rel = types.PPRelTypeType("Unbound")
+        user = types.PPUserType(uid=uid, ppn=0, relType=rel)
+        pp = types.PPDevType(ppn=ppn, uid=0, relType=rel)
+        m = messages.SetPP(user=[user], pp=[pp])
         return await self.request(m)
 
-    async def set_pp_user_dev_relation(self, uid: int, rel_type):
+    async def set_pp_user_dev_relation(self, uid: int, rel_type: str):
         """Change user-device relation type (Fixed <-> Dynamic)."""
-        m = messages.SetPPUserDevRelation()
-        m.uid = uid
-        m.relType = rel_type
+        m = messages.SetPPUserDevRelation(
+            uid=uid, relType=types.PPRelTypeType(rel_type)
+        )
         return await self.request(m)
 
     # -- DECT subscription --
 
-    async def get_dect_auth_code(self):
+    async def get_dect_auth_code(self) -> str:
         """Get the DECT subscription authentication code."""
         r = await self.request(messages.GetDECTAuthCode())
         r.raise_on_error()
         return r.ac
 
-    async def get_dect_subscription_mode(self):
+    async def get_dect_subscription_mode(self) -> types.DECTSubscriptionModeType | None:
         """Get current DECT subscription mode ('Configured', 'Wildcard', or 'Off')."""
         r = await self.request(messages.GetDECTSubscriptionMode())
         r.raise_on_error()
         return r.mode
 
-    async def get_dev_auto_create(self):
+    async def get_dev_auto_create(self) -> bool:
         """Get whether device auto-creation on subscription is enabled."""
         r = await self.request(messages.GetDevAutoCreate())
         r.raise_on_error()
@@ -237,70 +214,94 @@ class OMMClient2:
 
     async def set_dect_auth_code(self, ac: str):
         """Set the DECT subscription authentication code."""
-        m = messages.SetDECTAuthCode()
-        m.ac = ac
+        m = messages.SetDECTAuthCode(ac=ac)
         return await self.request(m)
 
-    async def set_dect_subscription_mode(self, mode: str, timeout: int = None):
+    async def set_dect_subscription_mode(self, mode: str, timeout: int | None = None):
         """Set DECT subscription mode ('Configured', 'Wildcard', or 'Off')."""
-        m = messages.SetDECTSubscriptionMode()
-        m.mode = types.DECTSubscriptionModeType(mode)
-        if timeout is not None:
-            m.timeout = timeout
+        m = messages.SetDECTSubscriptionMode(
+            mode=types.DECTSubscriptionModeType(mode),
+            timeout=timeout,
+        )
         return await self.request(m)
 
     async def set_dev_auto_create(self, enable: bool):
         """Set whether device auto-creation on subscription is enabled."""
-        m = messages.SetDevAutoCreate()
-        m.enable = enable
+        m = messages.SetDevAutoCreate(enable=enable)
         return await self.request(m)
 
     # -- event subscriptions --
 
-    async def subscribe(self, event_type: str, **filters):
-        """Subscribe to an event type. Filters: ppn, uid, rfpId, omm, trigger, scheme.
+    async def subscribe(
+        self,
+        event_cls: type[messages.Event],
+        ppn: int | None = None,
+        uid: int | None = None,
+        rfpId: int | None = None,
+        omm: int | None = None,
+        trigger: str | None = None,
+        scheme: str | None = None,
+    ) -> messages.SubscribeResp:
+        """Subscribe to an event type.
 
-        event_type is the spec's EventType name (e.g. "PPDevCnf", "PPState").
         Use -1 for "all" on numeric filters, "*" for wildcard on string filters.
         """
-        m = messages.Subscribe()
-        e = types.SubscribeCmdType()
-        e.cmd = "On"
-        e.eventType = event_type
-        for k, v in filters.items():
-            setattr(e, k, v)
-        m.childs.e = [e]
-        return await self.request(m)
+        cmd = types.SubscribeCmdType(
+            cmd="On",
+            eventType=event_cls.__name__.removeprefix("Event"),
+            ppn=ppn,
+            uid=uid,
+            rfpId=rfpId,
+            omm=omm,
+            trigger=trigger,
+            scheme=scheme,
+        )
+        return await self.request(messages.Subscribe(e=[cmd]))
 
-    async def unsubscribe(self, event_type: str, **filters):
+    async def unsubscribe(
+        self,
+        event_cls: type[messages.Event],
+        ppn: int | None = None,
+        uid: int | None = None,
+        rfpId: int | None = None,
+        omm: int | None = None,
+        trigger: str | None = None,
+        scheme: str | None = None,
+    ) -> messages.SubscribeResp:
         """Unsubscribe from an event type."""
-        m = messages.Subscribe()
-        e = types.SubscribeCmdType()
-        e.cmd = "Off"
-        e.eventType = event_type
-        for k, v in filters.items():
-            setattr(e, k, v)
-        m.childs.e = [e]
-        return await self.request(m)
+        cmd = types.SubscribeCmdType(
+            cmd="Off",
+            eventType=event_cls.__name__.removeprefix("Event"),
+            ppn=ppn,
+            uid=uid,
+            rfpId=rfpId,
+            omm=omm,
+            trigger=trigger,
+            scheme=scheme,
+        )
+        return await self.request(messages.Subscribe(e=[cmd]))
 
-    async def events(self, event_type: str):
+    async def events(self, event_cls: type[EventT]) -> AsyncGenerator[EventT, None]:
         """Async iterator over events of a given type. One listener per event_type.
 
-        event_type is the base name (e.g. "PPDevCnf") — the same name used in
-        subscribe(). Events arrive on the wire with an "Event" prefix which is
-        added automatically.
+        Events arrive on the wire with an "Event" prefix which is added automatically.
         """
-        wire_name = f"Event{event_type}"
-        queue = self._conn.register_listener(wire_name)
+        assert self._conn is not None
+        event_name = event_cls.__name__
+        queue = self._conn.register_listener(event_name)
         try:
             while True:
-                yield await queue.get()
+                event = await queue.get()
+                assert isinstance(event, event_cls)
+                yield event
         finally:
-            self._conn.unregister_listener(wire_name)
+            self._conn.unregister_listener(event_name)
 
     # -- iterators --
 
-    async def iter_pp_users(self, batch_size: int = 20):
+    async def pp_users(
+        self, batch_size: int = 20
+    ) -> AsyncGenerator[types.PPUserType, None]:
         """Yield all DECT phone users, paginating automatically."""
         uid = 0
         while True:
@@ -309,11 +310,13 @@ class OMMClient2:
                 r.raise_on_error()
             except exceptions.ENoEnt:
                 return
-            for user in r.childs.user:
+            for user in r.user:
                 yield user
-            uid = int(r.childs.user[-1].uid) + 1
+            uid = int(r.user[-1].uid) + 1
 
-    async def iter_pp_devs(self, batch_size: int = 20):
+    async def pp_devs(
+        self, batch_size: int = 20
+    ) -> AsyncGenerator[types.PPDevType, None]:
         """Yield all DECT phone devices, paginating automatically."""
         ppn = 0
         while True:
@@ -322,9 +325,9 @@ class OMMClient2:
                 r.raise_on_error()
             except exceptions.ENoEnt:
                 return
-            for pp in r.childs.pp:
+            for pp in r.pp:
                 yield pp
-            ppn = int(r.childs.pp[-1].ppn) + 1
+            ppn = int(r.pp[-1].ppn) + 1
 
     # -- lifecycle --
 
@@ -345,5 +348,5 @@ class OMMClient2:
         await self.connect()
         return self
 
-    async def __aexit__(self, *exc: Any) -> None:
+    async def __aexit__(self, *_) -> None:
         await self.close()

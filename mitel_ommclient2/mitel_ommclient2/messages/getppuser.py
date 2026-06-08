@@ -1,19 +1,18 @@
 #!/usr/bin/env python3
 
-from . import Request, Response, request_type, response_type
+from dataclasses import dataclass, field
+from . import Request, Response, axi_parsable
 from ..types import PPUserType
 
 
-@request_type
-class GetPPUser(Request):
-    FIELDS = {
-        "uid": int,
-        "maxRecords": int,
-    }
-
-
-@response_type
+@axi_parsable
+@dataclass
 class GetPPUserResp(Response):
-    CHILDS = {
-        "user": PPUserType,
-    }
+    user: list[PPUserType] = field(default_factory=list)
+
+
+@axi_parsable
+@dataclass
+class GetPPUser(Request[GetPPUserResp]):
+    uid: int = 0
+    maxRecords: int | None = None

@@ -1,16 +1,17 @@
 #!/usr/bin/env python3
 
-from . import Request, Response, request_type, response_type
+from dataclasses import dataclass
+from . import Request, Response, axi_parsable
 from ..types import DECTSubscriptionModeType
 
 
-@request_type
-class GetDECTSubscriptionMode(Request):
-    FIELDS = {}
-
-
-@response_type
+@axi_parsable
+@dataclass
 class GetDECTSubscriptionModeResp(Response):
-    FIELDS = {
-        "mode": DECTSubscriptionModeType,
-    }
+    mode: DECTSubscriptionModeType | None = None
+
+
+@axi_parsable
+@dataclass
+class GetDECTSubscriptionMode(Request[GetDECTSubscriptionModeResp]):
+    pass

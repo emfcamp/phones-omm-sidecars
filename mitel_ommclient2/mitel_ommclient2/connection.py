@@ -3,6 +3,7 @@
 Manages TCP/TLS socket, null-byte framed XML message send/recv,
 and seq -> Future mapping for request/response correlation.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -12,6 +13,7 @@ import socket
 import ssl
 
 from . import messages
+from .messages import Request, RespT, get_response_type
 
 logger = logging.getLogger(__name__)
 
@@ -55,10 +57,10 @@ class Connection:
         self._reader: asyncio.StreamReader | None = None
         self._writer: asyncio.StreamWriter | None = None
         self._seq: int = 0
-        self._pending: dict[int, asyncio.Future] = {}
-        self._event_listeners: dict[str, asyncio.Queue] = {}
+        self._pending: dict[int, asyncio.Future[messages.Response]] = {}
+        self._event_listeners: dict[str, asyncio.Queue[messages.Event]] = {}
         self._write_lock = asyncio.Lock()
-        self._recv_task: asyncio.Task | None = None
+        self._recv_task: asyncio.Task[None] | None = None
 
     async def connect(self) -> None:
         """Open TCP+TLS connection to OMM."""
@@ -74,7 +76,7 @@ class Connection:
         )
         self._recv_task = asyncio.create_task(self._recv_loop())
 
-    async def request(self, msg, timeout=None):
+    async def request(self, msg: Request[RespT], timeout: float | None = None) -> RespT:
         """Send request and wait for response.
 
         :param msg: Request message object
@@ -84,15 +86,20 @@ class Connection:
         seq = self._next_seq()
         msg.seq = seq
 
-        future = asyncio.get_running_loop().create_future()
+        future: asyncio.Future[messages.Response] = (
+            asyncio.get_running_loop().create_future()
+        )
         self._pending[seq] = future
 
+        assert self._writer is not None
         async with self._write_lock:
             self._writer.write(messages.construct(msg).encode("utf-8") + b"\0")
             await self._writer.drain()
 
         try:
-            return await asyncio.wait_for(future, timeout=timeout)
+            result = await asyncio.wait_for(future, timeout=timeout)
+            assert isinstance(result, get_response_type(type(msg)))
+            return result
         finally:
             self._pending.pop(seq, None)
 
@@ -101,11 +108,11 @@ class Connection:
         self._seq += 1
         return seq
 
-    def register_listener(self, event_type: str) -> asyncio.Queue:
+    def register_listener(self, event_type: str) -> asyncio.Queue[messages.Event]:
         """Register a listener queue for an event type. Returns the queue."""
         if event_type in self._event_listeners:
             raise ValueError(f"already listening for {event_type}")
-        queue: asyncio.Queue = asyncio.Queue()
+        queue: asyncio.Queue[messages.Event] = asyncio.Queue()
         self._event_listeners[event_type] = queue
         return queue
 
@@ -115,19 +122,22 @@ class Connection:
 
     async def _recv_loop(self) -> None:
         """Background: read null-byte terminated messages, dispatch to pending."""
+        assert self._reader is not None
+        reader = self._reader
         buffer = b""
         try:
             while True:
-                data = await asyncio.wait_for(
-                    self._reader.read(4096), timeout=READ_TIMEOUT
-                )
+                async with asyncio.timeout(READ_TIMEOUT):
+                    data = await reader.read(4096)
                 if not data:
                     logger.warning("connection closed by OMM")
                     break
                 buffer += data
 
                 while b"\0" in buffer:
-                    msg_bytes, buffer = buffer.split(b"\0", 1)
+                    parts = buffer.split(b"\0", 1)
+                    msg_bytes = parts[0]
+                    buffer = parts[1]
                     if not msg_bytes:
                         continue
                     try:
@@ -136,15 +146,19 @@ class Connection:
                         logger.exception("failed to parse message: %r", msg_bytes[:200])
                         continue
 
-                    seq = getattr(response, "seq", None)
-                    if seq is not None and seq in self._pending:
-                        self._pending[seq].set_result(response)
+                    if isinstance(response, messages.Response):
+                        if response.seq is not None and response.seq in self._pending:
+                            self._pending[response.seq].set_result(response)
                     else:
-                        queue = self._event_listeners.get(response.name)
+                        assert isinstance(response, messages.Event)
+                        event_name = type(response).__name__
+                        queue = self._event_listeners.get(event_name)
                         if queue is not None:
                             queue.put_nowait(response)
                         else:
-                            logger.warning("unhandled unsolicited message (seq=%s): %s", seq, response.name)
+                            logger.warning(
+                                "unhandled unsolicited message: %s", event_name
+                            )
 
         except Exception:
             logger.exception("recv loop error")
@@ -178,5 +192,5 @@ class Connection:
         await self.connect()
         return self
 
-    async def __aexit__(self, *exc):
+    async def __aexit__(self, *exc: object) -> None:
         await self.close()

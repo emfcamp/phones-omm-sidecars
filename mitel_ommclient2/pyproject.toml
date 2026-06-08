@@ -12,15 +12,13 @@ description = "Another attempt for a modern client library to the Mitel OM Appli
 readme = "README.md"
 license = { file="LICENSE" }
 requires-python = ">=3.7"
+dependencies = [
+  "rsa",
+]
 classifiers = [
     "Programming Language :: Python :: 3",
     "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
-]
-
-[project.optional-dependencies]
-crypt = [
-  "rsa",
 ]
 
 [project.scripts]

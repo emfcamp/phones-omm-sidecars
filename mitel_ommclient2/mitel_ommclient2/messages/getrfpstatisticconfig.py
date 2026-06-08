@@ -1,17 +1,18 @@
 #!/usr/bin/env python3
 
-from . import Request, Response, request_type, response_type
-from ..types import RFPStatNameType
+from dataclasses import dataclass, field
+from . import Request, Response, axi_parsable
+from ..types import RFPStatHeadType, RFPStatNameType
 
 
-@request_type
-class GetRFPStatisticConfig(Request):
-    FIELDS = {}
-
-
-@response_type
+@axi_parsable
+@dataclass
 class GetRFPStatisticConfigResp(Response):
-    CHILDS = {
-        "rfpStatName": RFPStatNameType,
-        "rfpStatHead": None,
-    }
+    rfpStatHead: list[RFPStatHeadType] = field(default_factory=list)
+    rfpStatName: list[RFPStatNameType] = field(default_factory=list)
+
+
+@axi_parsable
+@dataclass
+class GetRFPStatisticConfig(Request[GetRFPStatisticConfigResp]):
+    pass

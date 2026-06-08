@@ -1,14 +1,12 @@
 #!/usr/bin/env python3
 
-from . import Event, event_type
+from dataclasses import dataclass, field
+from . import Event, axi_parsable
 from ..types import PPDevType
 
 
-@event_type
+@axi_parsable
+@dataclass
 class EventPPDevCnf(Event):
-    FIELDS = {
-        "deleted": bool,
-    }
-    CHILDS = {
-        "pp": PPDevType,
-    }
+    deleted: bool | None = None
+    pp: list[PPDevType] = field(default_factory=list)

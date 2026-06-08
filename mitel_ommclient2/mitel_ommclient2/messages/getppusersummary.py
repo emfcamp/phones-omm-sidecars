@@ -1,17 +1,18 @@
 #!/usr/bin/env python3
 
-from . import Request, Response, request_type, response_type
+from dataclasses import dataclass
+from . import Request, Response, axi_parsable
 
 
-@request_type
-class GetPPUserSummary(Request):
-    FIELDS = {}
-
-
-@response_type
+@axi_parsable
+@dataclass
 class GetPPUserSummaryResp(Response):
-    FIELDS = {
-        "nRecords": int,
-        "nLocatable": int,
-        "nSipRegistration": int,
-    }
+    nRecords: int | None = None
+    nLocatable: int | None = None
+    nSipRegistration: int | None = None
+
+
+@axi_parsable
+@dataclass
+class GetPPUserSummary(Request[GetPPUserSummaryResp]):
+    pass

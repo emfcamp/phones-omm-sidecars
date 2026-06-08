@@ -4,6 +4,7 @@ The recv loop must call os._exit(1) when the connection dies (read timeout,
 OMM closes connection), but NOT when the connection is closed intentionally
 via close().
 """
+
 import asyncio
 from unittest.mock import AsyncMock, patch, MagicMock
 
@@ -51,6 +52,7 @@ async def test_os_exit_on_empty_read(conn):
 async def test_no_os_exit_on_intentional_close(conn):
     """Intentional close() must NOT call os._exit."""
     read_block = asyncio.Event()
+
     async def blocking_read(_):
         await read_block.wait()
         return b""

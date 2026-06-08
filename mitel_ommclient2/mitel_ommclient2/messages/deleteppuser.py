@@ -1,16 +1,17 @@
 #!/usr/bin/env python3
 
-from . import Request, Response, request_type, response_type
+from dataclasses import dataclass
+from . import Request, Response, axi_parsable
 
 
-@request_type
-class DeletePPUser(Request):
-    FIELDS = {
-        "uid": int,
-        "num": str,
-    }
-
-
-@response_type
+@axi_parsable
+@dataclass
 class DeletePPUserResp(Response):
     pass
+
+
+@axi_parsable
+@dataclass
+class DeletePPUser(Request[DeletePPUserResp]):
+    uid: int | None = None
+    num: str | None = None

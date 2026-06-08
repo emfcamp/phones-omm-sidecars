@@ -1,16 +1,17 @@
 #!/usr/bin/env python3
 
-from . import Request, Response, request_type, response_type
+from dataclasses import dataclass
+from . import Request, Response, axi_parsable
 
 
-@request_type
-class GetPPDevSummary(Request):
-    FIELDS = {}
-
-
-@response_type
+@axi_parsable
+@dataclass
 class GetPPDevSummaryResp(Response):
-    FIELDS = {
-        "nRecords": int,
-        "subscribedDevs": int,
-    }
+    nRecords: int | None = None
+    subscribedDevs: int | None = None
+
+
+@axi_parsable
+@dataclass
+class GetPPDevSummary(Request[GetPPDevSummaryResp]):
+    pass
