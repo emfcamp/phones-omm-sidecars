@@ -84,8 +84,7 @@ class OMMClient2:
             password=self._password,
             UserDeviceSyncClient="true" if self._ommsync else None,
         )
-        self._open_resp = await self._conn.request(m, self._timeout)
-        self._open_resp.raise_on_error()
+        self._open_resp = await self.request(m)
         self._ping_task = asyncio.create_task(self._ping_loop())
 
     async def _ping_loop(self) -> None:
@@ -98,29 +97,25 @@ class OMMClient2:
                 logger.exception("ping failed")
 
     async def request(self, msg: Request[RespT], timeout: float | None = None) -> RespT:
-        """Send a request and wait for its response.
+        """Send a request and wait for its response. Raises on OMM error.
 
         :param msg: Request message object
         :param timeout: Per-call timeout override, uses default if None
         """
         assert self._conn is not None
-        return await self._conn.request(msg, timeout or self._timeout)
+        r = await self._conn.request(msg, timeout or self._timeout)
+        r.raise_on_error()
+        return r
 
     # -- basic requests --
 
-    async def ping(self) -> bool:
-        """Is OMM still there?
-
-        Returns True when response is received.
-        """
-        r = await self.request(messages.Ping())
-        return r.errCode is None
+    async def ping(self) -> None:
+        """Is OMM still there? Raises on error."""
+        await self.request(messages.Ping())
 
     async def get_publickey(self):
         """Get OMM's RSA public key for encrypting secrets."""
-        r = await self.request(messages.GetPublicKey())
-        r.raise_on_error()
-        return r
+        return await self.request(messages.GetPublicKey())
 
     async def encrypt(self, secret: str) -> str:
         """RSA-encrypt a secret for OMM (e.g. SIP password)."""
@@ -197,19 +192,16 @@ class OMMClient2:
     async def get_dect_auth_code(self) -> str:
         """Get the DECT subscription authentication code."""
         r = await self.request(messages.GetDECTAuthCode())
-        r.raise_on_error()
         return r.ac
 
     async def get_dect_subscription_mode(self) -> types.DECTSubscriptionModeType | None:
         """Get current DECT subscription mode ('Configured', 'Wildcard', or 'Off')."""
         r = await self.request(messages.GetDECTSubscriptionMode())
-        r.raise_on_error()
         return r.mode
 
     async def get_dev_auto_create(self) -> bool:
         """Get whether device auto-creation on subscription is enabled."""
         r = await self.request(messages.GetDevAutoCreate())
-        r.raise_on_error()
         return r.enable
 
     async def set_dect_auth_code(self, ac: str):
@@ -305,9 +297,8 @@ class OMMClient2:
         """Yield all DECT phone users, paginating automatically."""
         uid = 0
         while True:
-            r = await self.get_pp_user(uid, max_records=batch_size)
             try:
-                r.raise_on_error()
+                r = await self.get_pp_user(uid, max_records=batch_size)
             except exceptions.ENoEnt:
                 return
             for user in r.user:
@@ -320,9 +311,8 @@ class OMMClient2:
         """Yield all DECT phone devices, paginating automatically."""
         ppn = 0
         while True:
-            r = await self.get_pp_dev(ppn, max_records=batch_size)
             try:
-                r.raise_on_error()
+                r = await self.get_pp_dev(ppn, max_records=batch_size)
             except exceptions.ENoEnt:
                 return
             for pp in r.pp:
