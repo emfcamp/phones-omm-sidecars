@@ -1,0 +1,9 @@
+services:
+  dect-users:
+    image: ghcr.io/emfcamp/phones-omm-sidecars:latest
+    restart: unless-stopped
+    environment:
+      OMM_HOST: 127.0.0.1
+      OMM_USER: admin
+      OMM_PASS: secret
+      LOG_LEVEL: INFO
