@@ -50,6 +50,8 @@ from .eventppdevcnf import EventPPDevCnf
 from .eventppdevsummary import EventPPDevSummary
 from .eventpptransaction import EventPPTransaction
 from .eventppusersummary import EventPPUserSummary
+from .eventrfpcnf import EventRFPCnf
+from .eventrfpstate import EventRFPState
 
 __all__ = [
     "Message",
@@ -72,6 +74,8 @@ __all__ = [
     "EventPPDevSummary",
     "EventPPTransaction",
     "EventPPUserSummary",
+    "EventRFPCnf",
+    "EventRFPState",
     "GetAccount",
     "GetAccountResp",
     "GetDECTAuthCode",

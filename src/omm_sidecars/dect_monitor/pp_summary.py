@@ -7,15 +7,14 @@ Exposes device and user counts as Prometheus gauges.
 
 import asyncio
 import logging
-from collections.abc import Callable
-from typing import Protocol, TypeVar
+from typing import Protocol
 
 from prometheus_client import Gauge
 
 from mitel_ommclient2.client import OMMClient2
-from mitel_ommclient2.messages import Event, EventPPDevSummary, EventPPUserSummary
+from mitel_ommclient2.messages import EventPPDevSummary, EventPPUserSummary
 
-EventT = TypeVar("EventT", bound=Event)
+from omm_sidecars.dect_monitor._util import listen
 
 log = logging.getLogger(__name__)
 
@@ -49,17 +48,17 @@ pp_user_sip_registered = Gauge(
 )
 
 
-async def run(client: OMMClient2) -> None:
-    """Subscribe, poll initial state, listen for updates."""
+async def run(client: OMMClient2, tg: asyncio.TaskGroup) -> None:
+    """Subscribe, poll initial state, register listeners."""
     await client.subscribe(EventPPDevSummary)
     await client.subscribe(EventPPUserSummary)
     log.info("subscribed to PPDevSummary, PPUserSummary")
 
     # initial poll
     dev = await client.get_pp_dev_summary()
-    _update_dev(dev)
+    await _update_dev(dev)
     user = await client.get_pp_user_summary()
-    _update_user(user)
+    await _update_user(user)
     log.info(
         "initial state: %d devices (%d subscribed), %d users (%d sip, %d locatable)",
         dev.nRecords or 0,
@@ -69,28 +68,19 @@ async def run(client: OMMClient2) -> None:
         user.nLocatable or 0,
     )
 
-    # listen for updates
-    await asyncio.gather(
-        _listen(client, EventPPDevSummary, _update_dev),
-        _listen(client, EventPPUserSummary, _update_user),
-    )
+    # register listeners
+    tg.create_task(listen(client, EventPPDevSummary, _update_dev))
+    tg.create_task(listen(client, EventPPUserSummary, _update_user))
 
 
-async def _listen(
-    client: OMMClient2, event_cls: type[EventT], handler: Callable[[EventT], None]
-) -> None:
-    async for event in client.events(event_cls):
-        handler(event)
-
-
-def _update_dev(event: _HasDevSummary) -> None:
+async def _update_dev(event: _HasDevSummary) -> None:
     if event.nRecords is not None:
         pp_dev_total.set(event.nRecords)
     if event.subscribedDevs is not None:
         pp_dev_subscribed.set(event.subscribedDevs)
 
 
-def _update_user(event: _HasUserSummary) -> None:
+async def _update_user(event: _HasUserSummary) -> None:
     if event.nRecords is not None:
         pp_user_total.set(event.nRecords)
     if event.nLocatable is not None:

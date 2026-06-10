@@ -170,6 +170,22 @@ class OMMClient2:
         """Get DECT phone user summary."""
         return await self.request(messages.GetPPUserSummary())
 
+    async def get_rfp(
+        self,
+        rfp_id: int,
+        max_records: int | None = None,
+        with_state: bool = False,
+        with_details: bool = False,
+    ):
+        """Get one or more RFPs starting at rfp_id."""
+        m = messages.GetRFP(
+            id=rfp_id,
+            maxRecords=max_records,
+            withState=with_state,
+            withDetails=with_details,
+        )
+        return await self.request(m)
+
     # -- user-device binding (requires ommsync) --
 
     async def bind_user_device(self, uid: int, ppn: int, rel_type: str = "Dynamic"):
@@ -326,6 +342,22 @@ class OMMClient2:
             for pp in r.pp:
                 yield pp
             ppn = int(r.pp[-1].ppn) + 1
+
+    async def rfps(
+        self, batch_size: int = 20, with_state: bool = False
+    ) -> AsyncGenerator[types.RFPType, None]:
+        """Yield all RFPs, paginating automatically."""
+        rfp_id = 0
+        while True:
+            try:
+                r = await self.get_rfp(
+                    rfp_id, max_records=batch_size, with_state=with_state
+                )
+            except exceptions.ENoEnt:
+                return
+            for rfp in r.rfp:
+                yield rfp
+            rfp_id = int(r.rfp[-1].id) + 1
 
     # -- lifecycle --
 

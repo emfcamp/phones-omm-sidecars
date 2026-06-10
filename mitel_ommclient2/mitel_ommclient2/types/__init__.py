@@ -52,6 +52,10 @@ class PPRelTypeType(EnumType):
     VALUES = ["Fixed", "Dynamic", "Unbound"]
 
 
+class RFPSyncStateType(EnumType):
+    VALUES = ["Inactive", "NotSynced", "Searching", "Synced"]
+
+
 # -- child types (dataclasses) --
 
 
@@ -121,12 +125,31 @@ class RFPStatNameType:
 
 @dataclass
 class RFPType:
-    """Stub — RFPType has many fields depending on OMM version."""
-
+    # config
     id: int = 0
     ethAddr: str = ""
     dectOn: bool = False
     name: str = ""
+    hwType: str = ""
+    hierarchy1: str = ""
+    hierarchy2: str = ""
+    hierarchy3: str = ""
+    hierarchy4: str = ""
+    rpn: int | None = None
+    pagingArea: int | None = None
+    cluster: int | None = None
+    # state (withState)
+    connected: bool | None = None
+    ipAddr: str | None = None
+    dectRunning: bool | None = None
+    syncState: RFPSyncStateType | None = None
+    nSyncRels: int | None = None
+    # details (withDetails)
+    radioType: str | None = None
+    swVersion: str | None = None
+    # rfp42-specific (always available)
+    encryptionActive: bool | None = None
+    versionMismatch: bool | None = None
 
 
 @dataclass

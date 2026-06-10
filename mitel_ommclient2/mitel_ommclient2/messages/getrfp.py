@@ -16,5 +16,5 @@ class GetRFPResp(Response):
 class GetRFP(Request[GetRFPResp]):
     id: int = 0
     maxRecords: int | None = None
-    withState: str | None = None
-    withDetails: str | None = None
+    withState: bool | None = None
+    withDetails: bool | None = None
