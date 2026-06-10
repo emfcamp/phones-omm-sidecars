@@ -162,6 +162,14 @@ class OMMClient2:
         m.ppn = ppn
         return await self.request(m)
 
+    async def get_pp_dev_summary(self):
+        """Get DECT phone device summary."""
+        return await self.request(messages.GetPPDevSummary())
+
+    async def get_pp_user_summary(self):
+        """Get DECT phone user summary."""
+        return await self.request(messages.GetPPUserSummary())
+
     # -- user-device binding (requires ommsync) --
 
     async def bind_user_device(self, uid: int, ppn: int, rel_type: str = "Dynamic"):

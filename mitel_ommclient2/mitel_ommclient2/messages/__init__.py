@@ -47,7 +47,9 @@ from .setppuserdevrelation import SetPPUserDevRelation, SetPPUserDevRelationResp
 from .subscribe import Subscribe, SubscribeResp
 from .eventppcnf import EventPPCnf
 from .eventppdevcnf import EventPPDevCnf
+from .eventppdevsummary import EventPPDevSummary
 from .eventpptransaction import EventPPTransaction
+from .eventppusersummary import EventPPUserSummary
 
 __all__ = [
     "Message",
@@ -67,7 +69,9 @@ __all__ = [
     "DeletePPUserResp",
     "EventPPCnf",
     "EventPPDevCnf",
+    "EventPPDevSummary",
     "EventPPTransaction",
+    "EventPPUserSummary",
     "GetAccount",
     "GetAccountResp",
     "GetDECTAuthCode",

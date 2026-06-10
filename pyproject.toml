@@ -6,6 +6,7 @@ requires-python = ">=3.13"
 dependencies = [
     "audioop-lts",
     "mitel-ommclient2",
+    "prometheus-client",
     "pyvoip>=1.6.8",
 ]
 
@@ -30,6 +31,7 @@ dev = [
 ]
 
 [project.scripts]
+dect-monitor = "omm_sidecars.dect_monitor:main"
 dect-users = "omm_sidecars.dect_users:main"
 
 [tool.pytest.ini_options]
