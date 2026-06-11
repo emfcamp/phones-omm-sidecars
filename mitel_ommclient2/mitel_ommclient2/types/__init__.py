@@ -153,6 +153,20 @@ class RFPType:
 
 
 @dataclass
+class IpQualityType:
+    id: int = 0
+    connectedTime: int | None = None
+    currentRTT: int | None = None
+    maxRTT: int | None = None
+    count: int | None = None
+    interval1: int | None = None
+    interval2: int | None = None
+    interval3: int | None = None
+    interval4: int | None = None
+    interval5: int | None = None
+
+
+@dataclass
 class MsQualityType:
     id: int = 0
     connects: int | None = None

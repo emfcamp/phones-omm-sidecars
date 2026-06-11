@@ -21,6 +21,7 @@ from mitel_ommclient2.client import OMMClient2
 
 from omm_sidecars.dect_monitor import (
     pp_summary,
+    rfp_ip_quality,
     rfp_media_stream_quality,
     rfp_state,
     rfp_stats,
@@ -45,6 +46,7 @@ async def _run() -> None:
             await rfp_state.run(client, tg)
             await rfp_stats.run(client, tg)
             await rfp_media_stream_quality.run(client, tg)
+            await rfp_ip_quality.run(client, tg)
 
 
 def main() -> None:

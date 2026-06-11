@@ -30,6 +30,7 @@ from .getppuser import GetPPUser, GetPPUserResp
 from .getppusersummary import GetPPUserSummary, GetPPUserSummaryResp
 from .getpublickey import GetPublicKey, GetPublicKeyResp
 from .getrfp import GetRFP, GetRFPResp
+from .getrfpipquality import GetRFPIpQuality, GetRFPIpQualityResp
 from .getrfpmediastreamquality import (
     GetRFPMediaStreamQuality,
     GetRFPMediaStreamQualityResp,
@@ -55,6 +56,7 @@ from .eventppdevsummary import EventPPDevSummary
 from .eventpptransaction import EventPPTransaction
 from .eventppusersummary import EventPPUserSummary
 from .eventrfpcnf import EventRFPCnf
+from .eventrfpipquality import EventRFPIpQuality
 from .eventrfpmediastreamquality import EventRFPMediaStreamQuality
 from .eventrfpmsquality import EventRFPMsQuality
 from .eventrfpstate import EventRFPState
@@ -81,6 +83,7 @@ __all__ = [
     "EventPPTransaction",
     "EventPPUserSummary",
     "EventRFPCnf",
+    "EventRFPIpQuality",
     "EventRFPMediaStreamQuality",
     "EventRFPMsQuality",
     "EventRFPState",
@@ -104,6 +107,8 @@ __all__ = [
     "GetPublicKeyResp",
     "GetRFP",
     "GetRFPResp",
+    "GetRFPIpQuality",
+    "GetRFPIpQualityResp",
     "GetRFPMediaStreamQuality",
     "GetRFPMediaStreamQualityResp",
     "GetRFPSummary",
