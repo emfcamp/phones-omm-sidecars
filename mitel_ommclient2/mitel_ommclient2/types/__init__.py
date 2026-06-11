@@ -153,6 +153,19 @@ class RFPType:
 
 
 @dataclass
+class MsQualityType:
+    id: int = 0
+    connects: int | None = None
+    duration: int | None = None
+    packetsRx: int | None = None
+    octetsRx: int | None = None
+    packetsTx: int | None = None
+    octetsTx: int | None = None
+    packetsLost: int | None = None
+    maxJitter: int | None = None
+
+
+@dataclass
 class RFPStatHeadType:
     numElemPerRec: int = 0
     recordSets: int = 0

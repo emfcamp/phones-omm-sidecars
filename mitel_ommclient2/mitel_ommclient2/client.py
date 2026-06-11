@@ -202,6 +202,13 @@ class OMMClient2:
         )
         return await self.request(m)
 
+    async def get_rfp_media_stream_quality(
+        self, rfp_id: int, max_records: int | None = None
+    ):
+        """Get RFP media stream quality data starting at rfp_id."""
+        m = messages.GetRFPMediaStreamQuality(id=rfp_id, maxRecords=max_records)
+        return await self.request(m)
+
     # -- user-device binding (requires ommsync) --
 
     async def bind_user_device(self, uid: int, ppn: int, rel_type: str = "Dynamic"):
@@ -389,6 +396,22 @@ class OMMClient2:
             for stat in r.rfpStatData:
                 yield stat
             rfp_id = int(r.rfpStatData[-1].id) + 1
+
+    async def rfp_media_stream_quality(
+        self, batch_size: int = 20
+    ) -> AsyncGenerator[types.MsQualityType, None]:
+        """Yield RFP media stream quality records, paginating automatically."""
+        rfp_id = 0
+        while True:
+            try:
+                r = await self.get_rfp_media_stream_quality(
+                    rfp_id, max_records=batch_size
+                )
+            except exceptions.ENoEnt:
+                return
+            for ms in r.msQuality:
+                yield ms
+            rfp_id = int(r.msQuality[-1].id) + 1
 
     # -- lifecycle --
 
