@@ -25,6 +25,7 @@ from omm_sidecars.dect_monitor import (
     rfp_media_stream_quality,
     rfp_state,
     rfp_stats,
+    rfp_sync_quality,
 )
 
 logging.basicConfig(level=os.environ.get("LOG_LEVEL", "INFO").upper())
@@ -47,6 +48,7 @@ async def _run() -> None:
             await rfp_stats.run(client, tg)
             await rfp_media_stream_quality.run(client, tg)
             await rfp_ip_quality.run(client, tg)
+            await rfp_sync_quality.run(client, tg)
 
 
 def main() -> None:

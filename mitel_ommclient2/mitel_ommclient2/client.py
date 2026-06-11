@@ -214,6 +214,11 @@ class OMMClient2:
         m = messages.GetRFPIpQuality(id=rfp_id, maxRecords=max_records)
         return await self.request(m)
 
+    async def get_rfp_sync_quality(self, rfp_id: int, max_records: int | None = None):
+        """Get RFP sync quality data starting at rfp_id."""
+        m = messages.GetRFPSyncQuality(id=rfp_id, maxRecords=max_records)
+        return await self.request(m)
+
     # -- user-device binding (requires ommsync) --
 
     async def bind_user_device(self, uid: int, ppn: int, rel_type: str = "Dynamic"):
@@ -431,6 +436,20 @@ class OMMClient2:
             for iq in r.ipQuality:
                 yield iq
             rfp_id = int(r.ipQuality[-1].id) + 1
+
+    async def rfp_sync_quality(
+        self, batch_size: int = 20
+    ) -> AsyncGenerator[types.SyncQualityType, None]:
+        """Yield RFP sync quality records, paginating automatically."""
+        rfp_id = 0
+        while True:
+            try:
+                r = await self.get_rfp_sync_quality(rfp_id, max_records=batch_size)
+            except exceptions.ENoEnt:
+                return
+            for sq in r.syncQuality:
+                yield sq
+            rfp_id = int(r.syncQuality[-1].id) + 1
 
     # -- lifecycle --
 

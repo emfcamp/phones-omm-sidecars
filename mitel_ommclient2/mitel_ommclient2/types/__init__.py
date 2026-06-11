@@ -167,6 +167,15 @@ class IpQualityType:
 
 
 @dataclass
+class SyncQualityType:
+    id: int = 0
+    strongRels: int | None = None
+    lowRels: int | None = None
+    maxRSSI: int | None = None
+    minRSSI: int | None = None
+
+
+@dataclass
 class MsQualityType:
     id: int = 0
     connects: int | None = None

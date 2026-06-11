@@ -35,6 +35,7 @@ from .getrfpmediastreamquality import (
     GetRFPMediaStreamQuality,
     GetRFPMediaStreamQualityResp,
 )
+from .getrfpsyncquality import GetRFPSyncQuality, GetRFPSyncQualityResp
 from .getrfpsummary import GetRFPSummary, GetRFPSummaryResp
 from .getrfpstatistic import GetRFPStatistic, GetRFPStatisticResp
 from .getrfpstatisticconfig import GetRFPStatisticConfig, GetRFPStatisticConfigResp
@@ -60,6 +61,7 @@ from .eventrfpipquality import EventRFPIpQuality
 from .eventrfpmediastreamquality import EventRFPMediaStreamQuality
 from .eventrfpmsquality import EventRFPMsQuality
 from .eventrfpstate import EventRFPState
+from .eventrfpsyncquality import EventRFPSyncQuality
 
 __all__ = [
     "Message",
@@ -87,6 +89,7 @@ __all__ = [
     "EventRFPMediaStreamQuality",
     "EventRFPMsQuality",
     "EventRFPState",
+    "EventRFPSyncQuality",
     "GetAccount",
     "GetAccountResp",
     "GetDECTAuthCode",
@@ -112,6 +115,8 @@ __all__ = [
     "GetRFPMediaStreamQuality",
     "GetRFPMediaStreamQualityResp",
     "GetRFPSummary",
+    "GetRFPSyncQuality",
+    "GetRFPSyncQualityResp",
     "GetRFPSummaryResp",
     "GetRFPStatistic",
     "GetRFPStatisticResp",
