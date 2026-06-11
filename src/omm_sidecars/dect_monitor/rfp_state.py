@@ -29,27 +29,24 @@ _SYNC_STATE_MAP = {"Inactive": 0, "NotSynced": 1, "Searching": 2, "Synced": 3}
 
 # -- prometheus gauges --
 
-rfp_connected = Gauge(
-    "dect_rfp_connected", "RFP connected state", ["rfp_id", "rfp_name"]
-)
-rfp_dect_running = Gauge(
-    "dect_rfp_dect_running", "RFP DECT running state", ["rfp_id", "rfp_name"]
-)
+rfp_info = Gauge("dect_rfp_info", "RFP metadata", ["rfp_id", "rfp_name"])
+rfp_connected = Gauge("dect_rfp_connected", "RFP connected state", ["rfp_id"])
+rfp_dect_running = Gauge("dect_rfp_dect_running", "RFP DECT running state", ["rfp_id"])
 rfp_sync_state = Gauge(
     "dect_rfp_sync_state",
     "RFP sync state (0=Inactive, 1=NotSynced, 2=Searching, 3=Synced)",
-    ["rfp_id", "rfp_name"],
+    ["rfp_id"],
 )
 rfp_sync_rels = Gauge(
-    "dect_rfp_sync_relations", "Number of RFP sync relations", ["rfp_id", "rfp_name"]
+    "dect_rfp_sync_relations", "Number of RFP sync relations", ["rfp_id"]
 )
 rfp_encryption_active = Gauge(
-    "dect_rfp_encryption_active", "RFP DECT encryption active", ["rfp_id", "rfp_name"]
+    "dect_rfp_encryption_active", "RFP DECT encryption active", ["rfp_id"]
 )
 rfp_version_mismatch = Gauge(
     "dect_rfp_version_mismatch",
     "RFP software version mismatch with OMM",
-    ["rfp_id", "rfp_name"],
+    ["rfp_id"],
 )
 
 
@@ -79,15 +76,14 @@ async def _initial_poll(client: OMMClient2) -> None:
 
 def _update_gauges(rfp: RFPType) -> None:
     rfp_id = str(rfp.id)
-    rfp_connected.labels(rfp_id, rfp.name).set(int(rfp.connected or False))
-    rfp_dect_running.labels(rfp_id, rfp.name).set(int(rfp.dectRunning or False))
+    rfp_info.labels(rfp_id, rfp.name).set(1)
+    rfp_connected.labels(rfp_id).set(int(rfp.connected or False))
+    rfp_dect_running.labels(rfp_id).set(int(rfp.dectRunning or False))
     if rfp.syncState is not None:
-        rfp_sync_state.labels(rfp_id, rfp.name).set(
-            _SYNC_STATE_MAP.get(str(rfp.syncState), -1)
-        )
+        rfp_sync_state.labels(rfp_id).set(_SYNC_STATE_MAP.get(str(rfp.syncState), -1))
     if rfp.nSyncRels is not None:
-        rfp_sync_rels.labels(rfp_id, rfp.name).set(rfp.nSyncRels)
+        rfp_sync_rels.labels(rfp_id).set(rfp.nSyncRels)
     if rfp.encryptionActive is not None:
-        rfp_encryption_active.labels(rfp_id, rfp.name).set(int(rfp.encryptionActive))
+        rfp_encryption_active.labels(rfp_id).set(int(rfp.encryptionActive))
     if rfp.versionMismatch is not None:
-        rfp_version_mismatch.labels(rfp_id, rfp.name).set(int(rfp.versionMismatch))
+        rfp_version_mismatch.labels(rfp_id).set(int(rfp.versionMismatch))

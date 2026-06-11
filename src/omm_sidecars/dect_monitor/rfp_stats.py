@@ -47,7 +47,7 @@ async def run(client: OMMClient2, tg: asyncio.TaskGroup) -> None:
         _gauges[stat_name.elemId] = Gauge(
             metric_name,
             f"RFP statistic: {stat_name.name}",
-            ["rfp_id", "rfp_name"],
+            ["rfp_id"],
         )
         log.info("  %d: %s -> %s", stat_name.elemId, stat_name.name, metric_name)
 
@@ -63,20 +63,13 @@ async def _poll_loop(client: OMMClient2) -> None:
 
 async def _poll(client: OMMClient2) -> None:
     """Fetch all RFP statistic counters and update gauges."""
-    # get RFP names for labels
-    rfp_names: dict[int, str] = {}
-    async for rfp in client.rfps():
-        rfp_names[rfp.id] = rfp.name
-
-    # get statistic counters
     async for stat in client.rfp_statistics(record_set=0):
         rfp_id = str(stat.id)
-        rfp_name = rfp_names.get(stat.id, "")
         values = stat.counter.split(",")
         for elem_id, value_str in enumerate(values):
             if elem_id in _gauges:
                 try:
-                    _gauges[elem_id].labels(rfp_id, rfp_name).set(int(value_str))
+                    _gauges[elem_id].labels(rfp_id).set(int(value_str))
                 except ValueError:
                     log.warning(
                         "non-numeric counter value: rfp=%d elem=%d value=%r",
@@ -84,5 +77,3 @@ async def _poll(client: OMMClient2) -> None:
                         elem_id,
                         value_str,
                     )
-
-    log.debug("rfp stats polled: %d RFPs", len(rfp_names))
