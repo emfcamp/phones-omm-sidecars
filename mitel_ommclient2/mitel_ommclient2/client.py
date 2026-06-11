@@ -186,6 +186,22 @@ class OMMClient2:
         )
         return await self.request(m)
 
+    async def get_rfp_statistic_config(self):
+        """Get RFP statistic counter names and metadata."""
+        return await self.request(messages.GetRFPStatisticConfig())
+
+    async def get_rfp_statistic(
+        self,
+        rfp_id: int,
+        max_records: int | None = None,
+        record_set: int | None = None,
+    ):
+        """Get RFP statistic counters starting at rfp_id."""
+        m = messages.GetRFPStatistic(
+            id=rfp_id, maxRecords=max_records, recordSet=record_set
+        )
+        return await self.request(m)
+
     # -- user-device binding (requires ommsync) --
 
     async def bind_user_device(self, uid: int, ppn: int, rel_type: str = "Dynamic"):
@@ -358,6 +374,21 @@ class OMMClient2:
             for rfp in r.rfp:
                 yield rfp
             rfp_id = int(r.rfp[-1].id) + 1
+
+    async def rfp_statistics(
+        self, batch_size: int = 20, record_set: int = 0
+    ) -> AsyncGenerator[types.RFPStatDataType, None]:
+        """Yield RFP statistic records, paginating automatically."""
+        rfp_id = 0
+        while True:
+            r = await self.get_rfp_statistic(
+                rfp_id, max_records=batch_size, record_set=record_set
+            )
+            if not r.rfpStatData:
+                return
+            for stat in r.rfpStatData:
+                yield stat
+            rfp_id = int(r.rfpStatData[-1].id) + 1
 
     # -- lifecycle --
 

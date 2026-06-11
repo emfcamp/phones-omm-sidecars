@@ -19,7 +19,7 @@ from prometheus_client import start_http_server
 
 from mitel_ommclient2.client import OMMClient2
 
-from omm_sidecars.dect_monitor import pp_summary, rfp_state
+from omm_sidecars.dect_monitor import pp_summary, rfp_state, rfp_stats
 
 logging.basicConfig(level=os.environ.get("LOG_LEVEL", "INFO").upper())
 log = logging.getLogger(__name__)
@@ -38,6 +38,7 @@ async def _run() -> None:
         async with asyncio.TaskGroup() as tg:
             await pp_summary.run(client, tg)
             await rfp_state.run(client, tg)
+            await rfp_stats.run(client, tg)
 
 
 def main() -> None:
