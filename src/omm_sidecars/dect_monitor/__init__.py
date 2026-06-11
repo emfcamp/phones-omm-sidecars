@@ -21,6 +21,7 @@ from mitel_ommclient2.client import OMMClient2
 
 from omm_sidecars.dect_monitor import (
     pp_summary,
+    pp_transaction,
     rfp_ip_quality,
     rfp_media_stream_quality,
     rfp_state,
@@ -44,6 +45,7 @@ async def _run() -> None:
 
         async with asyncio.TaskGroup() as tg:
             await pp_summary.run(client, tg)
+            await pp_transaction.run(client, tg)
             await rfp_state.run(client, tg)
             await rfp_stats.run(client, tg)
             await rfp_media_stream_quality.run(client, tg)
