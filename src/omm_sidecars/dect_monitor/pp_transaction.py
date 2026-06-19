@@ -34,6 +34,11 @@ new_device_count = Gauge(
     "New DECT devices seen (first event from unknown ppn)",
     ["rfp_id"],
 )
+rfp_active_call_legs = Gauge(
+    "dect_rfp_active_call_legs",
+    "Active DECT call legs per RFP",
+    ["rfp_id"],
+)
 
 # -- sqlite --
 
@@ -62,6 +67,7 @@ _db = _init_db()
 # -- state --
 
 _known_ppns: set[int] = set()
+_current_rfp: dict[int, int] = {}  # ppn → rfp_id
 
 
 async def run(client: OMMClient2, tg: asyncio.TaskGroup) -> None:
@@ -102,3 +108,39 @@ async def _on_event(event: EventPPTransaction) -> None:
         (time.time(), event.ppn, event.trType, event.rfpId),
     )
     _db.commit()
+
+    if event.rfpId is not None:
+        _update_call_legs(event.ppn, event.trType, event.rfpId)
+
+
+def _update_call_legs(ppn: int, tr_type: str, rfp_id: int) -> None:
+    if tr_type == "Establish":
+        _current_rfp[ppn] = rfp_id
+        _bump_call_legs(rfp_id, 1)
+    elif tr_type == "ConnHandover":
+        old_rfp = _current_rfp.get(ppn)
+        if old_rfp is not None:
+            _bump_call_legs(old_rfp, -1)
+        else:
+            log.warning("ConnHandover for ppn %d without prior Establish", ppn)
+        _current_rfp[ppn] = rfp_id
+        _bump_call_legs(rfp_id, 1)
+    elif tr_type == "Release":
+        old_rfp = _current_rfp.pop(ppn, None)
+        if old_rfp is not None:
+            _bump_call_legs(old_rfp, -1)
+        else:
+            log.warning("Release for ppn %d without prior Establish", ppn)
+
+
+def _bump_call_legs(rfp_id: int, delta: int) -> None:
+    key = str(rfp_id)
+    cur = _active_call_legs.get(key, 0) + delta
+    if cur < 0:
+        log.warning("active call legs would go negative on rfp %d", rfp_id)
+        cur = 0
+    _active_call_legs[key] = cur
+    rfp_active_call_legs.labels(key).set(cur)
+
+
+_active_call_legs: dict[str, int] = {}
