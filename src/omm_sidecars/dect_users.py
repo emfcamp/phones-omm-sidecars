@@ -13,8 +13,9 @@ Exposes a webhook endpoint for the SIP core to notify us of bind/unbind events.
 import asyncio
 import logging
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from functools import partial
+from typing import Any
 
 import httpx
 import uvicorn
@@ -68,6 +69,29 @@ async def subscription_loop(client: OMMClient2) -> None:
             log.exception("subscription loop iteration failed")
 
         await asyncio.sleep(SUBSCRIPTION_INTERVAL)
+
+
+@dataclass
+class WebhookProperties:
+    name: str = ""
+    encryption: bool = False
+
+
+@dataclass
+class WebhookBody:
+    event: str
+    vanityNumber: int
+    tempNumber: int
+    properties: WebhookProperties = field(default_factory=WebhookProperties)
+
+    @classmethod
+    def from_json(cls, data: Any) -> "WebhookBody":
+        return cls(
+            event=data["event"],
+            vanityNumber=data["vanityNumber"],
+            tempNumber=data["tempNumber"],
+            properties=WebhookProperties(**data.get("properties", {})),
+        )
 
 
 @dataclass
@@ -167,42 +191,47 @@ async def device_event_handler(client: OMMClient2) -> None:
             log.exception("provisioning failed for ppn=%d", pp.ppn)
 
 
-async def handle_webhook(client: OMMClient2, request: Request) -> JSONResponse:
-    """Handle bind/unbind webhooks from the SIP core."""
-    body = await request.json()
-    event = body["event"]
-    vanity = str(body["vanityNumber"])
-    temp = str(body["tempNumber"])
-    name = body.get("vanityName", "")
-
-    if event == "bind":
-        old_num, new_num, new_name = temp, vanity, name
-    elif event == "unbind":
-        old_num, new_num, new_name = vanity, temp, None
-    else:
-        return JSONResponse({"error": f"unknown event: {event}"}, status_code=400)
-
-    log.info("webhook %s: old=%s new=%s", event, old_num, new_num)
-
-    # Get ppn and uid from old user before we delete anything
-    try:
-        resp = await client.get_pp_user_by_number(old_num)
-        old_user = resp.user[0]
-    except Exception:
-        return JSONResponse({"error": f"user not found: {old_num}"}, status_code=404)
+async def move_user(
+    client: OMMClient2,
+    old_num: int,
+    new_num: int,
+    new_properties: WebhookProperties,
+) -> None:
+    """Move a user from old_num to new_num with the given properties."""
+    resp = await client.get_pp_user_by_number(str(old_num))
+    old_user = resp.user[0]
     if old_user.ppn is None:
-        return JSONResponse({"error": f"user has no ppn: {old_num}"}, status_code=404)
+        raise ValueError(f"user {old_num} has no ppn")
 
-    new_user = types.PPUserType(num=new_num, name=new_name)
+    new_user = types.PPUserType(num=str(new_num), name=new_properties.name)
     await set_device_user(client, old_user.ppn, new_user, old_uid=old_user.uid)
 
+
+async def handle_webhook(client: OMMClient2, request: Request) -> JSONResponse:
+    """Handle bind/unbind webhooks from the SIP core."""
+    body = WebhookBody.from_json(await request.json())
+
     log.info(
-        "webhook %s complete: ppn=%d old=%s new=%s",
-        event,
-        old_user.ppn,
-        old_num,
-        new_num,
+        "webhook %s: temp=%d vanity=%d", body.event, body.tempNumber, body.vanityNumber
     )
+
+    try:
+        match body.event:
+            case "bind":
+                await move_user(
+                    client, body.tempNumber, body.vanityNumber, body.properties
+                )
+            case "unbind":
+                await move_user(
+                    client, body.vanityNumber, body.tempNumber, WebhookProperties()
+                )
+            case _:
+                return JSONResponse(
+                    {"error": f"unknown event: {body.event}"}, status_code=400
+                )
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=404)
+
     return JSONResponse({"ok": True})
 
 
