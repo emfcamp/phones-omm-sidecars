@@ -131,6 +131,11 @@ class OMMClient2:
         m = messages.GetPPUser(uid=uid, maxRecords=max_records)
         return await self.request(m)
 
+    async def get_pp_user_by_number(self, num: str):
+        """Get a DECT phone user by phone number."""
+        m = messages.GetPPUserByNumber(num=num)
+        return await self.request(m)
+
     async def set_pp_user(self, user: types.PPUserType):
         """Patch a DECT phone user. uid identifies the record, other fields are what to change."""
         m = messages.SetPPUser(user=[user])

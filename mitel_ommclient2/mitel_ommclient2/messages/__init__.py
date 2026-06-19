@@ -27,6 +27,7 @@ from .getdevautocreate import GetDevAutoCreate, GetDevAutoCreateResp
 from .getppdev import GetPPDev, GetPPDevResp
 from .getppdevsummary import GetPPDevSummary, GetPPDevSummaryResp
 from .getppuser import GetPPUser, GetPPUserResp
+from .getppuserbynumber import GetPPUserByNumber, GetPPUserByNumberResp
 from .getppusersummary import GetPPUserSummary, GetPPUserSummaryResp
 from .getpublickey import GetPublicKey, GetPublicKeyResp
 from .getrfp import GetRFP, GetRFPResp
@@ -104,6 +105,8 @@ __all__ = [
     "GetPPDevSummaryResp",
     "GetPPUser",
     "GetPPUserResp",
+    "GetPPUserByNumber",
+    "GetPPUserByNumberResp",
     "GetPPUserSummary",
     "GetPPUserSummaryResp",
     "GetPublicKey",

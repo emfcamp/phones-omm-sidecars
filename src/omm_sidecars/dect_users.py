@@ -6,14 +6,22 @@ Re-applies if changed externally (e.g. via web UI).
 
 Also listens for PPDevCnf events and creates provisional users for unbound
 devices by calling the SIP core's temp number API.
+
+Exposes a webhook endpoint for the SIP core to notify us of bind/unbind events.
 """
 
 import asyncio
 import logging
 import os
 from dataclasses import dataclass
+from functools import partial
 
 import httpx
+import uvicorn
+from starlette.applications import Starlette
+from starlette.requests import Request
+from starlette.responses import JSONResponse
+from starlette.routing import Route
 
 try:
     from dotenv import load_dotenv
@@ -30,6 +38,11 @@ logging.basicConfig(level=os.environ.get("LOG_LEVEL", "INFO").upper())
 log = logging.getLogger(__name__)
 
 SUBSCRIPTION_INTERVAL = 15  # seconds
+
+# Protects the unbind/bind critical section. The event handler re-checks
+# device state inside this lock to ignore intermediate states (uid=0) that
+# occur between unbind and bind during a webhook swap.
+swap_lock = asyncio.Lock()
 
 
 async def subscription_loop(client: OMMClient2) -> None:
@@ -83,6 +96,38 @@ async def assign_temp_number(ipei: str) -> TempNumberResult:
         )
 
 
+async def set_device_user(
+    client: OMMClient2,
+    ppn: int,
+    new_user: types.PPUserType,
+    old_uid: int | None = None,
+) -> int:
+    """Create a user and bind to a device. If old_uid is given, delete it first (swap)."""
+    assert new_user.num is not None
+
+    # Delete stale user with same number if it exists
+    try:
+        resp = await client.get_pp_user_by_number(new_user.num)
+        await client.delete_pp_user(uid=resp.user[0].uid)
+    except Exception:
+        pass
+
+    # Create new user
+    resp = await client.create_pp_user(new_user)
+    new_uid = resp.user[0].uid
+    log.info("created user uid=%d num=%s", new_uid, new_user.num)
+
+    # If swapping from old user, delete it (unbinds device) in lock
+    if old_uid:
+        async with swap_lock:
+            await client.delete_pp_user(uid=old_uid)
+            await client.bind_user_device(new_uid, ppn)
+    else:
+        await client.bind_user_device(new_uid, ppn)
+
+    return new_uid
+
+
 async def device_event_handler(client: OMMClient2) -> None:
     """Create provisional users for unbound devices."""
     log.info("subscribing to PPDevCnf")
@@ -103,6 +148,17 @@ async def device_event_handler(client: OMMClient2) -> None:
             log.error("ppn %d has no IPEI, skipping", pp.ppn)
             continue
 
+        # Re-check device state inside lock to ignore intermediate states
+        # during unbind/bind critical section
+        async with swap_lock:
+            resp = await client.get_pp_dev(pp.ppn)
+            if resp.pp[0].uid != 0:
+                log.debug(
+                    "ppn %d already has user uid=%d, skipping", pp.ppn, resp.pp[0].uid
+                )
+                continue
+
+        # Outside lock: safe to create temp user
         try:
             result = await assign_temp_number(pp.ipei)
         except Exception:
@@ -116,14 +172,49 @@ async def device_event_handler(client: OMMClient2) -> None:
 
         try:
             user = types.PPUserType(num=str(num), sipAuthId=sip_username)
-            resp = await client.create_pp_user(user)
-            new_uid = resp.user[0].uid
-            log.info("created provisional user uid=%d num=%d", new_uid, num)
-
-            await client.bind_user_device(new_uid, pp.ppn)
-            log.info("bound uid=%d to ppn=%d", new_uid, pp.ppn)
+            await set_device_user(client, pp.ppn, user)
+            log.info("provisioned ppn=%d -> num=%d", pp.ppn, num)
         except Exception:
             log.exception("provisioning failed for ppn=%d", pp.ppn)
+
+
+async def handle_webhook(client: OMMClient2, request: Request) -> JSONResponse:
+    """Handle bind/unbind webhooks from the SIP core."""
+    body = await request.json()
+    event = body["event"]
+    vanity = str(body["vanityNumber"])
+    temp = str(body["tempNumber"])
+    name = body.get("vanityName", "")
+
+    if event == "bind":
+        old_num, new_num, new_name = temp, vanity, name
+    elif event == "unbind":
+        old_num, new_num, new_name = vanity, temp, None
+    else:
+        return JSONResponse({"error": f"unknown event: {event}"}, status_code=400)
+
+    log.info("webhook %s: old=%s new=%s", event, old_num, new_num)
+
+    # Get ppn and uid from old user before we delete anything
+    try:
+        resp = await client.get_pp_user_by_number(old_num)
+        old_user = resp.user[0]
+    except Exception:
+        return JSONResponse({"error": f"user not found: {old_num}"}, status_code=404)
+    if old_user.ppn is None:
+        return JSONResponse({"error": f"user has no ppn: {old_num}"}, status_code=404)
+
+    new_user = types.PPUserType(num=new_num, name=new_name)
+    await set_device_user(client, old_user.ppn, new_user, old_uid=old_user.uid)
+
+    log.info(
+        "webhook %s complete: ppn=%d old=%s new=%s",
+        event,
+        old_user.ppn,
+        old_num,
+        new_num,
+    )
+    return JSONResponse({"ok": True})
 
 
 async def _main() -> None:
@@ -135,9 +226,20 @@ async def _main() -> None:
     log.info("connecting to %s", host)
     async with OMMClient2(host, user, password, ommsync=True) as client:
         log.info("connected, version=%s", client.open_resp.ommVersion)
+
+        app = Starlette(
+            routes=[
+                Route("/webhook", partial(handle_webhook, client), methods=["POST"]),
+            ]
+        )
+
+        config = uvicorn.Config(app, host="0.0.0.0", port=8080, log_level="info")
+        server = uvicorn.Server(config)
+
         async with asyncio.TaskGroup() as tg:
             tg.create_task(subscription_loop(client))
             tg.create_task(device_event_handler(client))
+            tg.create_task(server.serve())
 
 
 def main() -> None:
