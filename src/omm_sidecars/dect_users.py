@@ -230,7 +230,8 @@ async def _main() -> None:
             ]
         )
 
-        config = uvicorn.Config(app, host="0.0.0.0", port=8080, log_level="info")
+        port = int(os.environ.get("HTTP_PORT", "8080"))
+        config = uvicorn.Config(app, host="0.0.0.0", port=port, log_level="info")
         server = uvicorn.Server(config)
 
         async with asyncio.TaskGroup() as tg:

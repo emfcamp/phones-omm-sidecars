@@ -27,6 +27,9 @@ class _HasRFPList(Protocol):
 
 _SYNC_STATE_MAP = {"Inactive": 0, "NotSynced": 1, "Searching": 2, "Synced": 3}
 
+# -- shared state --
+rfp_names: dict[int, str] = {}
+
 # -- prometheus gauges --
 
 rfp_info = Gauge("dect_rfp_info", "RFP metadata", ["rfp_id", "rfp_name"])
@@ -76,6 +79,7 @@ async def _initial_poll(client: OMMClient2) -> None:
 
 def _update_gauges(rfp: RFPType) -> None:
     rfp_id = str(rfp.id)
+    rfp_names[rfp.id] = rfp.name
     rfp_info.labels(rfp_id, rfp.name).set(1)
     rfp_connected.labels(rfp_id).set(int(rfp.connected or False))
     rfp_dect_running.labels(rfp_id).set(int(rfp.dectRunning or False))

@@ -12,12 +12,19 @@ import logging
 import os
 import sqlite3
 import time
+from functools import partial
 
+import uvicorn
 from prometheus_client import Counter, Gauge
+from starlette.applications import Starlette
+from starlette.requests import Request
+from starlette.responses import JSONResponse
+from starlette.routing import Route
 
 from mitel_ommclient2.client import OMMClient2
 from mitel_ommclient2.messages import EventPPTransaction
 
+from omm_sidecars.dect_monitor import rfp_state
 from omm_sidecars.dect_monitor._util import listen
 
 log = logging.getLogger(__name__)
@@ -70,8 +77,47 @@ _known_ppns: set[int] = set()
 _current_rfp: dict[int, int] = {}  # ppn → rfp_id
 
 
+async def _handle_location(client: OMMClient2, request: Request) -> JSONResponse:
+    num = request.query_params.get("num")
+    if not num:
+        return JSONResponse({"error": "missing num parameter"}, status_code=400)
+
+    try:
+        resp = await client.get_pp_user_by_number(num)
+    except Exception as e:
+        return JSONResponse({"error": f"{type(e).__name__}: {e}"}, status_code=404)
+
+    if not resp.user:
+        return JSONResponse({"error": "no user found"}, status_code=404)
+
+    ppn = resp.user[0].ppn
+    if ppn == 0:
+        return JSONResponse({"error": "user is unbound (no device)"}, status_code=404)
+    row = _db.execute(
+        "SELECT tr_type, rfp_id, ts FROM pp_transaction WHERE ppn = ? ORDER BY ts DESC LIMIT 1",
+        (ppn,),
+    ).fetchone()
+    if row is None:
+        return JSONResponse({"ppn": ppn, "error": "no transactions"}, status_code=404)
+
+    tr_type, rfp_id, ts = row
+    rfp_name = (
+        rfp_state.rfp_names.get(rfp_id, "unknown") if rfp_id is not None else None
+    )
+    return JSONResponse(
+        {
+            "ppn": ppn,
+            "num": num,
+            "rfp_id": rfp_id,
+            "rfp_name": rfp_name,
+            "last_event": tr_type,
+            "timestamp": ts,
+        }
+    )
+
+
 async def run(client: OMMClient2, tg: asyncio.TaskGroup) -> None:
-    """Subscribe, enumerate known PPNs, register listener."""
+    """Subscribe, enumerate known PPNs, register listener, start HTTP API."""
     async for pp in client.pp_devs():
         _known_ppns.add(pp.ppn)
     log.info("known ppns: %d devices", len(_known_ppns))
@@ -80,6 +126,11 @@ async def run(client: OMMClient2, tg: asyncio.TaskGroup) -> None:
     log.info("subscribed to PPTransaction")
 
     tg.create_task(listen(client, EventPPTransaction, _on_event))
+
+    app = Starlette(routes=[Route("/location", partial(_handle_location, client))])
+    port = int(os.environ.get("HTTP_PORT", "8080"))
+    config = uvicorn.Config(app, host="0.0.0.0", port=port, log_level="info")
+    tg.create_task(uvicorn.Server(config).serve())
 
 
 async def _on_event(event: EventPPTransaction) -> None:
