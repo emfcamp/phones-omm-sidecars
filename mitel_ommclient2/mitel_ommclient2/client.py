@@ -141,6 +141,11 @@ class OMMClient2:
         m = messages.SetPPUser(user=[user])
         return await self.request(m)
 
+    async def set_pp_dev(self, pp: types.PPDevType):
+        """Patch a DECT phone device. ppn identifies the record, other fields are what to change."""
+        m = messages.SetPPDev(pp=[pp])
+        return await self.request(m)
+
     async def create_pp_user(self, user: types.PPUserType):
         """Create a DECT phone user. OMM picks uid if not set."""
         m = messages.CreatePPUser(user=[user])

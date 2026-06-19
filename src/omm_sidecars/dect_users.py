@@ -191,6 +191,31 @@ async def device_event_handler(client: OMMClient2) -> None:
             log.exception("provisioning failed for ppn=%d", pp.ppn)
 
 
+async def apply_dev_properties(
+    client: OMMClient2,
+    ppn: int,
+    properties: WebhookProperties,
+) -> None:
+    """Apply device properties."""
+    pp = types.PPDevType(ppn=ppn, encrypt=properties.encryption)
+    await client.set_pp_dev(pp)
+
+
+async def update_properties(
+    client: OMMClient2,
+    vanity: int,
+    properties: WebhookProperties,
+) -> None:
+    """Update user and device properties for a vanity number."""
+    resp = await client.get_pp_user_by_number(str(vanity))
+    user = resp.user[0]
+    if user.ppn is None:
+        raise ValueError(f"user {vanity} has no ppn")
+
+    await client.set_pp_user(types.PPUserType(uid=user.uid, name=properties.name))
+    await apply_dev_properties(client, user.ppn, properties)
+
+
 async def move_user(
     client: OMMClient2,
     old_num: int,
@@ -205,6 +230,8 @@ async def move_user(
 
     new_user = types.PPUserType(num=str(new_num), name=new_properties.name)
     await set_device_user(client, old_user.ppn, new_user, old_uid=old_user.uid)
+
+    await apply_dev_properties(client, old_user.ppn, new_properties)
 
 
 async def handle_webhook(client: OMMClient2, request: Request) -> JSONResponse:
@@ -225,6 +252,8 @@ async def handle_webhook(client: OMMClient2, request: Request) -> JSONResponse:
                 await move_user(
                     client, body.vanityNumber, body.tempNumber, WebhookProperties()
                 )
+            case "properties":
+                await update_properties(client, body.vanityNumber, body.properties)
             case _:
                 return JSONResponse(
                     {"error": f"unknown event: {body.event}"}, status_code=400

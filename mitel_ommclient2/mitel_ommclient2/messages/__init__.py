@@ -49,6 +49,7 @@ from .setdectsubscriptionmode import (
 )
 from .setdevautocreate import SetDevAutoCreate, SetDevAutoCreateResp
 from .setpp import SetPP, SetPPResp
+from .setppdev import SetPPDev, SetPPDevResp
 from .setppuser import SetPPUser, SetPPUserResp
 from .setppuserdevrelation import SetPPUserDevRelation, SetPPUserDevRelationResp
 from .subscribe import Subscribe, SubscribeResp
@@ -137,6 +138,8 @@ __all__ = [
     "SetDevAutoCreateResp",
     "SetPP",
     "SetPPResp",
+    "SetPPDev",
+    "SetPPDevResp",
     "SetPPUser",
     "SetPPUserResp",
     "SetPPUserDevRelation",
