@@ -128,6 +128,27 @@ async def set_device_user(
     return new_uid
 
 
+async def provision_device(client: OMMClient2, ppn: int) -> None:
+    """Assign a temp number and bind to a device."""
+    # Re-check device state inside lock to ignore intermediate states
+    async with swap_lock:
+        resp = await client.get_pp_dev(ppn)
+        pp = resp.pp[0]
+
+    if pp.uid != 0:
+        log.debug("ppn %d already has user uid=%d, skipping", ppn, pp.uid)
+        return
+    if not pp.ipei:
+        log.warning("ppn %d has no IPEI, skipping", ppn)
+        return
+
+    result = await assign_temp_number(pp.ipei)
+
+    user = types.PPUserType(num=str(result.tempNumber), sipAuthId=result.sipUsername)
+    await set_device_user(client, ppn, user)
+    log.info("provisioned ppn=%d -> num=%d", ppn, result.tempNumber)
+
+
 async def device_event_handler(client: OMMClient2) -> None:
     """Create provisional users for unbound devices."""
     log.info("subscribing to PPDevCnf")
@@ -135,44 +156,13 @@ async def device_event_handler(client: OMMClient2) -> None:
 
     async for event in client.events(EventPPCnf):
         if not event.pp:
-            continue  # no device data in this event
-
+            continue
         pp = event.pp[0]
-
-        if pp.uid is None:
-            continue
         if pp.uid != 0:
-            continue  # already has a user
-
-        # Re-check device state inside lock to ignore intermediate states
-        # during unbind/bind critical section
-        async with swap_lock:
-            resp = await client.get_pp_dev(pp.ppn)
-            pp = resp.pp[0]
-
-        if pp.uid != 0:
-            log.debug("ppn %d already has user uid=%d, skipping", pp.ppn, pp.uid)
             continue
-        if not pp.ipei:
-            log.warn("ppn %d has no IPEI, skipping", pp.ppn)
-            continue
-
-        # Outside lock: safe to create temp user
-        try:
-            result = await assign_temp_number(pp.ipei)
-        except Exception:
-            log.exception("failed to assign temp number for IPEI %s", pp.ipei)
-            continue
-
-        num = result.tempNumber
-        sip_username = result.sipUsername
-
-        log.info("provisioning ppn=%d -> num=%d sip=%s", pp.ppn, num, sip_username)
 
         try:
-            user = types.PPUserType(num=str(num), sipAuthId=sip_username)
-            await set_device_user(client, pp.ppn, user)
-            log.info("provisioned ppn=%d -> num=%d", pp.ppn, num)
+            await provision_device(client, pp.ppn)
         except Exception:
             log.exception("provisioning failed for ppn=%d", pp.ppn)
 
@@ -226,6 +216,14 @@ async def _main() -> None:
     async with OMMClient2(host, user, password, ommsync=True) as client:
         log.info("connected, version=%s", client.open_resp.ommVersion)
 
+        async def provision_orphaned_devices() -> None:
+            async for dev in client.pp_devs():
+                if dev.uid == 0:
+                    try:
+                        await provision_device(client, dev.ppn)
+                    except Exception:
+                        log.exception("startup provisioning failed for ppn=%d", dev.ppn)
+
         app = Starlette(
             routes=[
                 Route("/webhook", partial(handle_webhook, client), methods=["POST"]),
@@ -239,6 +237,7 @@ async def _main() -> None:
             tg.create_task(subscription_loop(client))
             tg.create_task(device_event_handler(client))
             tg.create_task(server.serve())
+            tg.create_task(provision_orphaned_devices())
 
 
 def main() -> None:
