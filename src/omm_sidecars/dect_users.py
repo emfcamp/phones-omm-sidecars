@@ -5,12 +5,15 @@ auth code is "0000", auto-create is enabled, subscription mode is Configured.
 Re-applies if changed externally (e.g. via web UI).
 
 Also listens for PPDevCnf events and creates provisional users for unbound
-devices with temp numbers in the 1905xxxx range.
+devices by calling the SIP core's temp number API.
 """
 
 import asyncio
 import logging
 import os
+from dataclasses import dataclass
+
+import httpx
 
 try:
     from dotenv import load_dotenv
@@ -27,13 +30,6 @@ logging.basicConfig(level=os.environ.get("LOG_LEVEL", "INFO").upper())
 log = logging.getLogger(__name__)
 
 SUBSCRIPTION_INTERVAL = 15  # seconds
-
-
-def temp_number(ppn: int) -> str:
-    """Provisional user number: 1905 + ppn zero-padded to 4 digits."""
-    if ppn > 9999:
-        raise ValueError(f"ppn {ppn} exceeds 1905xxxx range")
-    return f"1905{ppn:04d}"
 
 
 async def subscription_loop(client: OMMClient2) -> None:
@@ -61,6 +57,32 @@ async def subscription_loop(client: OMMClient2) -> None:
         await asyncio.sleep(SUBSCRIPTION_INTERVAL)
 
 
+@dataclass
+class TempNumberResult:
+    tempNumber: int
+    sipUsername: str
+
+
+async def assign_temp_number(ipei: str) -> TempNumberResult:
+    """Call SIP core API to assign a temp number for a DECT device."""
+    api_url = os.environ["CORE_API_URL"]
+    api_token = os.environ["CORE_API_TOKEN"]
+
+    async with httpx.AsyncClient() as client:
+        resp = await client.post(
+            f"{api_url}/temp-numbers/assign/dect",
+            headers={"Authorization": f"Bearer {api_token}"},
+            json={"ipei": ipei},
+            timeout=10,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        return TempNumberResult(
+            tempNumber=data["tempNumber"],
+            sipUsername=data["sipUsername"],
+        )
+
+
 async def device_event_handler(client: OMMClient2) -> None:
     """Create provisional users for unbound devices."""
     log.info("subscribing to PPDevCnf")
@@ -77,19 +99,26 @@ async def device_event_handler(client: OMMClient2) -> None:
         if pp.uid != 0:
             continue  # already has a user
 
-        try:
-            num = temp_number(pp.ppn)
-        except ValueError:
-            log.error("ppn %d exceeds 1905xxxx range", pp.ppn)
+        if not pp.ipei:
+            log.error("ppn %d has no IPEI, skipping", pp.ppn)
             continue
 
-        log.info("provisioning ppn=%d -> num=%s", pp.ppn, num)
+        try:
+            result = await assign_temp_number(pp.ipei)
+        except Exception:
+            log.exception("failed to assign temp number for IPEI %s", pp.ipei)
+            continue
+
+        num = result.tempNumber
+        sip_username = result.sipUsername
+
+        log.info("provisioning ppn=%d -> num=%d sip=%s", pp.ppn, num, sip_username)
 
         try:
-            user = types.PPUserType(num=num)
+            user = types.PPUserType(num=str(num), sipAuthId=sip_username)
             resp = await client.create_pp_user(user)
             new_uid = resp.user[0].uid
-            log.info("created provisional user uid=%d num=%s", new_uid, num)
+            log.info("created provisional user uid=%d num=%d", new_uid, num)
 
             await client.bind_user_device(new_uid, pp.ppn)
             log.info("bound uid=%d to ppn=%d", new_uid, pp.ppn)
