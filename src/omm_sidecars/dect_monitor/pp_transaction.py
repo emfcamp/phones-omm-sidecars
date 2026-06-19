@@ -94,7 +94,7 @@ async def _handle_location(client: OMMClient2, request: Request) -> JSONResponse
     if ppn == 0:
         return JSONResponse({"error": "user is unbound (no device)"}, status_code=404)
     row = _db.execute(
-        "SELECT tr_type, rfp_id, ts FROM pp_transaction WHERE ppn = ? ORDER BY ts DESC LIMIT 1",
+        "SELECT tr_type, rfp_id, ts FROM pp_transaction WHERE ppn = ? AND rfp_id IS NOT NULL ORDER BY ts DESC LIMIT 1",
         (ppn,),
     ).fetchone()
     if row is None:
