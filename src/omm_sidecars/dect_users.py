@@ -144,19 +144,18 @@ async def device_event_handler(client: OMMClient2) -> None:
         if pp.uid != 0:
             continue  # already has a user
 
-        if not pp.ipei:
-            log.error("ppn %d has no IPEI, skipping", pp.ppn)
-            continue
-
         # Re-check device state inside lock to ignore intermediate states
         # during unbind/bind critical section
         async with swap_lock:
             resp = await client.get_pp_dev(pp.ppn)
-            if resp.pp[0].uid != 0:
-                log.debug(
-                    "ppn %d already has user uid=%d, skipping", pp.ppn, resp.pp[0].uid
-                )
-                continue
+            pp = resp.pp[0]
+
+        if pp.uid != 0:
+            log.debug("ppn %d already has user uid=%d, skipping", pp.ppn, pp.uid)
+            continue
+        if not pp.ipei:
+            log.warn("ppn %d has no IPEI, skipping", pp.ppn)
+            continue
 
         # Outside lock: safe to create temp user
         try:
