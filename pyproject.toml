@@ -2,12 +2,10 @@
 name = "omm-sidecars"
 version = "0.1.0"
 description = "Sidecar services for the OpenMobility® Manager (OMM)"
-requires-python = ">=3.13"
+requires-python = ">=3.11"
 dependencies = [
-    "audioop-lts",
     "mitel-ommclient2",
     "prometheus-client",
-    "pyvoip>=1.6.8",
 ]
 
 [project.optional-dependencies]
