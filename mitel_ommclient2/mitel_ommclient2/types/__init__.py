@@ -272,3 +272,39 @@ class PPUserType:
     altDisplayNum: str | None = None
     sipProfileId: int | None = None
     pickupGroupNum: str | None = None
+
+
+@dataclass
+class MessageType:
+    sendTime: int = 0
+    id: int = 0
+    ppn: int | None = None
+    fromAddr: str = ""
+    fromName: str | None = None
+    toAddr: str = ""
+    toName: str | None = None
+    callbackAddr: str | None = None
+    callbackName: str | None = None
+    autoCallback: bool | None = None
+    priority: str | None = None
+    folder: str | None = None
+    noReply: bool | None = None
+    autoDelete: bool | None = None
+    popUp: bool | None = None
+    encoding: str | None = None
+    contentType: str | None = None
+    content: str | None = None
+    melody: str | None = None
+    explicitToneSelection: str | None = None
+    signallingVolume: int | None = None
+    increasingVolume: bool | None = None
+    vibraCall: bool | None = None
+    discCallOnRecv: bool | None = None
+    noInbandSignalling: bool | None = None
+    ringerTone: bool | None = None
+    textColourR: int | None = None
+    textColourG: int | None = None
+    textColourB: int | None = None
+    bgColourR: int | None = None
+    bgColourG: int | None = None
+    bgColourB: int | None = None

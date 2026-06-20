@@ -64,6 +64,8 @@ from .eventrfpmediastreamquality import EventRFPMediaStreamQuality
 from .eventrfpmsquality import EventRFPMsQuality
 from .eventrfpstate import EventRFPState
 from .eventrfpsyncquality import EventRFPSyncQuality
+from .eventmessagesend import EventMessageSend
+from .sendmessage import SendMessage, SendMessageResp
 
 __all__ = [
     "Message",
@@ -92,6 +94,9 @@ __all__ = [
     "EventRFPMsQuality",
     "EventRFPState",
     "EventRFPSyncQuality",
+    "EventMessageSend",
+    "SendMessage",
+    "SendMessageResp",
     "GetAccount",
     "GetAccountResp",
     "GetDECTAuthCode",

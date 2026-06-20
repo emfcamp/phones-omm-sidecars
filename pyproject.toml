@@ -34,6 +34,7 @@ dev = [
 [project.scripts]
 dect-monitor = "omm_sidecars.dect_monitor:main"
 dect-users = "omm_sidecars.dect_users:main"
+dect-fun = "omm_sidecars.dect_fun:main"
 
 [tool.pytest.ini_options]
 timeout = 10
