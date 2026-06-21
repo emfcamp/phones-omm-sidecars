@@ -18,6 +18,8 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse
 from starlette.routing import Route
 
+from omm_sidecars._auth import BearerAuthMiddleware
+
 from mitel_ommclient2.client import OMMClient2
 from mitel_ommclient2.messages import EventMessageSend, SendMessage
 from mitel_ommclient2.types import MessageType
@@ -110,7 +112,8 @@ async def _listen_outbound(client: OMMClient2) -> None:
 async def start(client: OMMClient2, tg: asyncio.TaskGroup) -> None:
     """Start the messaging bridge: HTTP server + outbound listener."""
     app = Starlette(
-        routes=[Route("/message", partial(_handle_inbound, client), methods=["POST"])]
+        routes=[Route("/message", partial(_handle_inbound, client), methods=["POST"])],
+        middleware=[BearerAuthMiddleware],
     )
     port = int(os.environ.get("HTTP_PORT", "8080"))
     config = uvicorn.Config(app, host="0.0.0.0", port=port, log_level="info")

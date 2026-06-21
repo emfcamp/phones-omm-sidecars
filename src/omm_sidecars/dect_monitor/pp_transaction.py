@@ -21,6 +21,8 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse
 from starlette.routing import Route
 
+from omm_sidecars._auth import BearerAuthMiddleware
+
 from mitel_ommclient2.client import OMMClient2
 from mitel_ommclient2.messages import EventPPTransaction
 
@@ -127,7 +129,10 @@ async def run(client: OMMClient2, tg: asyncio.TaskGroup) -> None:
 
     tg.create_task(listen(client, EventPPTransaction, _on_event))
 
-    app = Starlette(routes=[Route("/location", partial(_handle_location, client))])
+    app = Starlette(
+        routes=[Route("/location", partial(_handle_location, client))],
+        middleware=[BearerAuthMiddleware],
+    )
     port = int(os.environ.get("HTTP_PORT", "8080"))
     config = uvicorn.Config(app, host="0.0.0.0", port=port, log_level="info")
     tg.create_task(uvicorn.Server(config).serve())

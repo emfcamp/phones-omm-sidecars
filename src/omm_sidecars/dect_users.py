@@ -24,6 +24,8 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse
 from starlette.routing import Route
 
+from omm_sidecars._auth import BearerAuthMiddleware
+
 try:
     from dotenv import load_dotenv
 
@@ -285,7 +287,8 @@ async def _main() -> None:
         app = Starlette(
             routes=[
                 Route("/webhook", partial(handle_webhook, client), methods=["POST"]),
-            ]
+            ],
+            middleware=[BearerAuthMiddleware],
         )
 
         port = int(os.environ.get("HTTP_PORT", "8080"))
