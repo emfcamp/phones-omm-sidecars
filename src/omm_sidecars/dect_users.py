@@ -37,7 +37,10 @@ from mitel_ommclient2.client import OMMClient2
 from mitel_ommclient2.messages import EventPPCnf, EventPPDevCnf
 from mitel_ommclient2 import types
 
-logging.basicConfig(level=os.environ.get("LOG_LEVEL", "INFO").upper())
+logging.basicConfig(
+    format="%(asctime)s %(levelname)s %(name)s %(message)s",
+    level=os.environ.get("LOG_LEVEL", "INFO").upper(),
+)
 log = logging.getLogger(__name__)
 
 SUBSCRIPTION_INTERVAL = 15  # seconds
