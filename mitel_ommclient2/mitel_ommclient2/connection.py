@@ -162,7 +162,9 @@ class Connection:
                                 "unhandled unsolicited message: %s", event_name
                             )
 
-        except Exception:
+        except Exception as e:
+            if isinstance(e.__cause__, asyncio.CancelledError):
+                raise  # cancelled by close()
             logger.exception("recv loop error")
         finally:
             for future in self._pending.values():
