@@ -31,9 +31,9 @@ log = logging.getLogger(__name__)
 @dataclass
 class MessageBody:
     to: int
-    from_number: int
+    fromNumber: int
     content: str
-    from_name: str | None = None
+    fromName: str | None = None
 
 
 # -- inbound: core → DECT --
@@ -46,8 +46,8 @@ async def _handle_inbound(client: OMMClient2, request: Request) -> JSONResponse:
     msg = MessageType(
         sendTime=int(time.time()),
         toAddr=f"tel:{body.to}",
-        fromAddr=f"tel:{body.from_number}",
-        fromName=body.from_name,
+        fromAddr=f"tel:{body.fromNumber}",
+        fromName=body.fromName,
         content=body.content,
         priority="Normal",
     )
@@ -55,10 +55,10 @@ async def _handle_inbound(client: OMMClient2, request: Request) -> JSONResponse:
     try:
         await client.request(SendMessage(msg=[msg]))
     except Exception as e:
-        log.error("inbound failed: %d → %d: %s", body.from_number, body.to, e)
+        log.error("inbound failed: %d → %d: %s", body.fromNumber, body.to, e)
         return JSONResponse({"error": str(e)}, status_code=500)
 
-    log.info("inbound: %d → %d", body.from_number, body.to)
+    log.info("inbound: %d → %d", body.fromNumber, body.to)
     return JSONResponse({"status": "ok"})
 
 
@@ -74,13 +74,19 @@ async def _relay_outbound(msg: MessageType) -> None:
 
     body = MessageBody(
         to=to,
-        from_number=from_number,
-        from_name=msg.fromName,
+        fromNumber=from_number,
+        fromName=msg.fromName,
         content=msg.content or "",
     )
 
+    token = os.environ["MESSAGE_TARGET_TOKEN"]
     async with httpx.AsyncClient() as http:
-        resp = await http.post(core_url, json=body.__dict__, timeout=10)
+        resp = await http.post(
+            core_url,
+            json=body.__dict__,
+            headers={"Authorization": f"Bearer {token}"},
+            timeout=10,
+        )
         resp.raise_for_status()
         log.info("outbound: %d → %d", from_number, to)
 
