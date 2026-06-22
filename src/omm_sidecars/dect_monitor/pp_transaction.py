@@ -19,6 +19,7 @@ from prometheus_client import Counter, Gauge
 from starlette.applications import Starlette
 from starlette.requests import Request
 from starlette.responses import JSONResponse
+from starlette.middleware import Middleware
 from starlette.routing import Route
 
 from omm_sidecars._auth import BearerAuthMiddleware
@@ -131,7 +132,7 @@ async def run(client: OMMClient2, tg: asyncio.TaskGroup) -> None:
 
     app = Starlette(
         routes=[Route("/location", partial(_handle_location, client))],
-        middleware=[BearerAuthMiddleware],
+        middleware=[Middleware(BearerAuthMiddleware)],
     )
     port = int(os.environ.get("HTTP_PORT", "8080"))
     config = uvicorn.Config(app, host="0.0.0.0", port=port, log_level="info")

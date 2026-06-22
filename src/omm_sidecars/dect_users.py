@@ -22,6 +22,7 @@ import uvicorn
 from starlette.applications import Starlette
 from starlette.requests import Request
 from starlette.responses import JSONResponse
+from starlette.middleware import Middleware
 from starlette.routing import Route
 
 from omm_sidecars._auth import BearerAuthMiddleware
@@ -291,7 +292,7 @@ async def _main() -> None:
             routes=[
                 Route("/webhook", partial(handle_webhook, client), methods=["POST"]),
             ],
-            middleware=[BearerAuthMiddleware],
+            middleware=[Middleware(BearerAuthMiddleware)],
         )
 
         port = int(os.environ.get("HTTP_PORT", "8080"))
