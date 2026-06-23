@@ -20,6 +20,7 @@ from prometheus_client import start_http_server
 from mitel_ommclient2.client import OMMClient2
 
 from omm_sidecars.dect_monitor import (
+    firmware,
     pp_summary,
     pp_transaction,
     rfp_ip_quality,
@@ -54,6 +55,7 @@ async def _run() -> None:
             await rfp_media_stream_quality.run(client, tg)
             await rfp_ip_quality.run(client, tg)
             await rfp_sync_quality.run(client, tg)
+            await firmware.run(client, tg)
 
 
 def main() -> None:

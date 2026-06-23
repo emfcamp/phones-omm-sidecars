@@ -180,6 +180,10 @@ class OMMClient2:
         """Get DECT phone user summary."""
         return await self.request(messages.GetPPUserSummary())
 
+    async def get_pp_firmware_update_overview(self):
+        """Get DECT phone firmware update overview."""
+        return await self.request(messages.GetPPFirmwareUpdateOverview())
+
     async def get_rfp(
         self,
         rfp_id: int,

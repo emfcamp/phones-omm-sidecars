@@ -40,6 +40,10 @@ from .getrfpsyncquality import GetRFPSyncQuality, GetRFPSyncQualityResp
 from .getrfpsummary import GetRFPSummary, GetRFPSummaryResp
 from .getrfpstatistic import GetRFPStatistic, GetRFPStatisticResp
 from .getrfpstatisticconfig import GetRFPStatisticConfig, GetRFPStatisticConfigResp
+from .getppfirmwareupdateoverview import (
+    GetPPFirmwareUpdateOverview,
+    GetPPFirmwareUpdateOverviewResp,
+)
 from .open import Open, OpenResp
 from .ping import Ping, PingResp
 from .setdectauthcode import SetDECTAuthCode, SetDECTAuthCodeResp
@@ -65,6 +69,7 @@ from .eventrfpmsquality import EventRFPMsQuality
 from .eventrfpstate import EventRFPState
 from .eventrfpsyncquality import EventRFPSyncQuality
 from .eventmessagesend import EventMessageSend
+from .eventppfirmwareupdateoverview import EventPPFirmwareUpdateOverview
 from .sendmessage import SendMessage, SendMessageResp
 
 __all__ = [
@@ -95,6 +100,7 @@ __all__ = [
     "EventRFPState",
     "EventRFPSyncQuality",
     "EventMessageSend",
+    "EventPPFirmwareUpdateOverview",
     "SendMessage",
     "SendMessageResp",
     "GetAccount",
@@ -151,4 +157,6 @@ __all__ = [
     "SetPPUserDevRelationResp",
     "Subscribe",
     "SubscribeResp",
+    "GetPPFirmwareUpdateOverview",
+    "GetPPFirmwareUpdateOverviewResp",
 ]
