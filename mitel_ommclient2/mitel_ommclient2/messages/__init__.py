@@ -44,6 +44,10 @@ from .getppfirmwareupdateoverview import (
     GetPPFirmwareUpdateOverview,
     GetPPFirmwareUpdateOverviewResp,
 )
+from .getppfirmwareupdatestatus import (
+    GetPPFirmwareUpdateStatus,
+    GetPPFirmwareUpdateStatusResp,
+)
 from .open import Open, OpenResp
 from .ping import Ping, PingResp
 from .setdectauthcode import SetDECTAuthCode, SetDECTAuthCodeResp
@@ -159,4 +163,6 @@ __all__ = [
     "SubscribeResp",
     "GetPPFirmwareUpdateOverview",
     "GetPPFirmwareUpdateOverviewResp",
+    "GetPPFirmwareUpdateStatus",
+    "GetPPFirmwareUpdateStatusResp",
 ]

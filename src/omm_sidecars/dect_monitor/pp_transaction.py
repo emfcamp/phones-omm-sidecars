@@ -14,15 +14,11 @@ import sqlite3
 import time
 from functools import partial
 
-import uvicorn
 from prometheus_client import Counter, Gauge
 from starlette.applications import Starlette
 from starlette.requests import Request
 from starlette.responses import JSONResponse
-from starlette.middleware import Middleware
 from starlette.routing import Route
-
-from omm_sidecars._auth import BearerAuthMiddleware
 
 from mitel_ommclient2.client import OMMClient2
 from mitel_ommclient2.messages import EventPPTransaction
@@ -119,8 +115,8 @@ async def _handle_location(client: OMMClient2, request: Request) -> JSONResponse
     )
 
 
-async def run(client: OMMClient2, tg: asyncio.TaskGroup) -> None:
-    """Subscribe, enumerate known PPNs, register listener, start HTTP API."""
+async def run(client: OMMClient2, app: Starlette, tg: asyncio.TaskGroup) -> None:
+    """Subscribe, enumerate known PPNs, register listener, add HTTP route."""
     async for pp in client.pp_devs():
         _known_ppns.add(pp.ppn)
     log.info("known ppns: %d devices", len(_known_ppns))
@@ -130,13 +126,7 @@ async def run(client: OMMClient2, tg: asyncio.TaskGroup) -> None:
 
     tg.create_task(listen(client, EventPPTransaction, _on_event))
 
-    app = Starlette(
-        routes=[Route("/location", partial(_handle_location, client))],
-        middleware=[Middleware(BearerAuthMiddleware)],
-    )
-    port = int(os.environ.get("HTTP_PORT", "8080"))
-    config = uvicorn.Config(app, host="0.0.0.0", port=port, log_level="info")
-    tg.create_task(uvicorn.Server(config).serve())
+    app.routes.append(Route("/location", partial(_handle_location, client)))
 
 
 async def _on_event(event: EventPPTransaction) -> None:

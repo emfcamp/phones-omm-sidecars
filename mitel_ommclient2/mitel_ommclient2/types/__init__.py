@@ -202,6 +202,15 @@ class RFPStatDataType:
 
 
 @dataclass
+class PPFirmwareUpdateStatusType:
+    ppn: int = 0
+    state: str = ""
+    cause: str | None = None
+    bytes: int | None = None
+    version: str | None = None
+
+
+@dataclass
 class PPUserType:
     uid: int = 0
     timeStamp: int | None = None

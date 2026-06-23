@@ -15,9 +15,13 @@ try:
 except ImportError:
     pass
 
+import uvicorn
 from prometheus_client import start_http_server
+from starlette.applications import Starlette
+from starlette.middleware import Middleware
 
 from mitel_ommclient2.client import OMMClient2
+from omm_sidecars._auth import BearerAuthMiddleware
 
 from omm_sidecars.dect_monitor import (
     firmware,
@@ -42,20 +46,28 @@ async def _run() -> None:
     user = os.environ["OMM_USER"]
     password = os.environ["OMM_PASS"]
     prom_port = int(os.environ.get("OMM_PROM_PORT", "8000"))
+    http_port = int(os.environ.get("HTTP_PORT", "8080"))
 
     async with OMMClient2(host, user, password) as client:
         log.info("connected to %s, prometheus on :%d", host, prom_port)
         start_http_server(prom_port)
 
+        app = Starlette(middleware=[Middleware(BearerAuthMiddleware)])
+
         async with asyncio.TaskGroup() as tg:
             await pp_summary.run(client, tg)
-            await pp_transaction.run(client, tg)
+            await pp_transaction.run(client, app, tg)
             await rfp_state.run(client, tg)
             await rfp_stats.run(client, tg)
             await rfp_media_stream_quality.run(client, tg)
             await rfp_ip_quality.run(client, tg)
             await rfp_sync_quality.run(client, tg)
-            await firmware.run(client, tg)
+            await firmware.run(client, app, tg)
+
+            config = uvicorn.Config(
+                app, host="0.0.0.0", port=http_port, log_level="info"
+            )
+            tg.create_task(uvicorn.Server(config).serve())
 
 
 def main() -> None:

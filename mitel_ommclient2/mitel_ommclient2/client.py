@@ -184,6 +184,14 @@ class OMMClient2:
         """Get DECT phone firmware update overview."""
         return await self.request(messages.GetPPFirmwareUpdateOverview())
 
+    async def get_pp_firmware_update_status(
+        self, ppn: int, max_records: int | None = None
+    ):
+        """Get firmware update status for one or more PPs starting at ppn."""
+        return await self.request(
+            messages.GetPPFirmwareUpdateStatus(ppn=ppn, maxRecords=max_records)
+        )
+
     async def get_rfp(
         self,
         rfp_id: int,

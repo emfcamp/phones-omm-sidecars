@@ -3,13 +3,19 @@
 Subscribes to EventPPFirmwareUpdateOverview.
 Polls initial state, then listens for updates.
 Exposes firmware download counts as Prometheus gauges.
+Per-PP firmware status via /firmware HTTP endpoint.
 """
 
 import asyncio
 import logging
+from functools import partial
 from typing import Protocol
 
 from prometheus_client import Gauge
+from starlette.applications import Starlette
+from starlette.requests import Request
+from starlette.responses import JSONResponse
+from starlette.routing import Route
 
 from mitel_ommclient2.client import OMMClient2
 from mitel_ommclient2.messages import EventPPFirmwareUpdateOverview
@@ -50,8 +56,8 @@ fw_overview_count = Gauge(
 )
 
 
-async def run(client: OMMClient2, tg: asyncio.TaskGroup) -> None:
-    """Subscribe, poll initial state, register listeners."""
+async def run(client: OMMClient2, app: Starlette, tg: asyncio.TaskGroup) -> None:
+    """Subscribe, poll initial state, register listeners, add HTTP route."""
     await client.subscribe(EventPPFirmwareUpdateOverview)
     log.info("subscribed to PPFirmwareUpdateOverview")
 
@@ -69,6 +75,48 @@ async def run(client: OMMClient2, tg: asyncio.TaskGroup) -> None:
 
     # register listener
     tg.create_task(listen(client, EventPPFirmwareUpdateOverview, _update_gauges))
+
+    # HTTP route
+    app.routes.append(Route("/firmware", partial(_handle_firmware, client)))
+
+
+async def _handle_firmware(client: OMMClient2, request: Request) -> JSONResponse:
+    num = request.query_params.get("num")
+    if not num:
+        return JSONResponse({"error": "missing num parameter"}, status_code=400)
+
+    try:
+        resp = await client.get_pp_user_by_number(num)
+    except Exception as e:
+        return JSONResponse({"error": f"{type(e).__name__}: {e}"}, status_code=404)
+
+    if not resp.user:
+        return JSONResponse({"error": "no user found"}, status_code=404)
+
+    ppn = resp.user[0].ppn
+    if ppn is None or ppn == 0:
+        return JSONResponse({"error": "user is unbound (no device)"}, status_code=404)
+
+    try:
+        fw_resp = await client.get_pp_firmware_update_status(ppn)
+    except Exception as e:
+        return JSONResponse({"error": f"{type(e).__name__}: {e}"}, status_code=502)
+
+    if not fw_resp.ppFwSt:
+        return JSONResponse({"ppn": ppn, "num": num, "state": "unknown"})
+
+    fw = fw_resp.ppFwSt[0]
+    return JSONResponse(
+        {
+            "ppn": ppn,
+            "num": num,
+            "state": fw.state,
+            # reason for error/barred states (busy, battery, crc, noMem, etc.)
+            "cause": fw.cause,
+            "bytes_remaining": fw.bytes,
+            "current_version": fw.version,
+        }
+    )
 
 
 async def _update_gauges(event: _HasFirmwareOverview) -> None:
