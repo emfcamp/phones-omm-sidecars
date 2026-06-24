@@ -43,10 +43,12 @@ async def run(client: OMMClient2, tg: asyncio.TaskGroup) -> None:
 
     for stat_name in config.rfpStatName:
         _name_map[stat_name.elemId] = stat_name.name
-        metric_name = f"dect_rfp_stat_{_sanitize(stat_name.name)}"
+        metric_name = (
+            f"dect_rfp_stat_{_sanitize(stat_name.group)}_{_sanitize(stat_name.name)}"
+        )
         _gauges[stat_name.elemId] = Gauge(
             metric_name,
-            f"RFP statistic: {stat_name.name}",
+            f"{stat_name.group}: {stat_name.name}",
             ["rfp_id"],
         )
         log.info("  %d: %s -> %s", stat_name.elemId, stat_name.name, metric_name)
