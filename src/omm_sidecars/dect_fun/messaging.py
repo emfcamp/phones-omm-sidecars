@@ -21,6 +21,7 @@ from starlette.routing import Route
 
 from omm_sidecars._auth import BearerAuthMiddleware
 
+from mitel_ommclient2 import exceptions
 from mitel_ommclient2.client import OMMClient2
 from mitel_ommclient2.messages import EventMessageSend, SendMessage
 from mitel_ommclient2.types import MessageType
@@ -38,13 +39,32 @@ class MessageBody:
     content: str
     fromName: str | None = None
 
+    @classmethod
+    def from_json(cls, data: dict) -> "MessageBody":
+        for field in ("to", "fromNumber"):
+            if not isinstance(data.get(field), int):
+                raise ValueError(f"{field}: expected int, got {type(data.get(field)).__name__}")
+        return cls(**data)
+
 
 # -- inbound: core → DECT --
 
 
+AXI_ERROR_MAP: dict[type[exceptions.OMResponseException], int] = {
+    exceptions.ENoEnt: 404,
+    exceptions.EFailed: 400,
+    exceptions.ETooLong: 400,
+    exceptions.ELicense: 403,
+    exceptions.ENoMem: 503,
+}
+
+
 async def _handle_inbound(client: OMMClient2, request: Request) -> JSONResponse:
     """Receive a message from the SIP core and deliver to a DECT phone."""
-    body = MessageBody(**await request.json())
+    try:
+        body = MessageBody.from_json(await request.json())
+    except ValueError as e:
+        return JSONResponse({"error": str(e)}, status_code=400)
 
     msg = MessageType(
         sendTime=int(time.time()),
@@ -57,6 +77,10 @@ async def _handle_inbound(client: OMMClient2, request: Request) -> JSONResponse:
 
     try:
         await client.request(SendMessage(msg=[msg]))
+    except exceptions.OMResponseException as e:
+        status = AXI_ERROR_MAP.get(type(e), 500)
+        log.warning("inbound failed: %d → %d: %s", body.fromNumber, body.to, e)
+        return JSONResponse({"error": str(e)}, status_code=status)
     except Exception as e:
         log.error("inbound failed: %d → %d: %s", body.fromNumber, body.to, e)
         return JSONResponse({"error": str(e)}, status_code=500)
@@ -90,7 +114,9 @@ async def _relay_outbound(msg: MessageType) -> None:
             headers={"Authorization": f"Bearer {token}"},
             timeout=10,
         )
-        resp.raise_for_status()
+        if resp.status_code >= 400:
+            log.warning("outbound failed: %d → %d: %d %s", from_number, to, resp.status_code, resp.text)
+            return
         log.info("outbound: %d → %d", from_number, to)
 
 
