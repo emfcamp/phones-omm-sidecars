@@ -39,7 +39,7 @@ from mitel_ommclient2.messages import EventPPCnf, EventPPDevCnf
 from mitel_ommclient2 import types
 
 logging.basicConfig(
-    format="%(asctime)s %(levelname)s %(name)s %(message)s",
+    format="%(levelname)s %(name)s %(message)s",
     level=os.environ.get("LOG_LEVEL", "INFO").upper(),
 )
 log = logging.getLogger(__name__)

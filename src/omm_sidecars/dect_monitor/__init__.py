@@ -35,7 +35,7 @@ from omm_sidecars.dect_monitor import (
 )
 
 logging.basicConfig(
-    format="%(asctime)s %(levelname)s %(name)s %(message)s",
+    format="%(levelname)s %(name)s %(message)s",
     level=os.environ.get("LOG_LEVEL", "INFO").upper(),
 )
 log = logging.getLogger(__name__)
