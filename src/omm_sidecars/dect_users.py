@@ -97,6 +97,7 @@ class DeviceConfig:
     currentNumber: int
     sipUsername: str
     properties: DeviceProperties
+    event: str | None = None
 
     @classmethod
     def from_json(cls, data: Any) -> "DeviceConfig":
@@ -104,6 +105,7 @@ class DeviceConfig:
             currentNumber=data["currentNumber"],
             sipUsername=data["sipUsername"],
             properties=DeviceProperties.from_json(data.get("properties", {})),
+            event=data.get("event"),
         )
 
 
@@ -242,21 +244,25 @@ async def device_event_handler(client: OMMClient2) -> None:
 
 async def handle_webhook(client: OMMClient2, request: Request) -> JSONResponse:
     """Handle webhooks from the SIP core."""
-    body = await request.json()
-    event = body.get("event")
+    try:
+        config = DeviceConfig.from_json(await request.json())
+    except (KeyError, TypeError, ValueError) as e:
+        log.warning("webhook: bad request: %s", e)
+        return JSONResponse({"error": str(e)}, status_code=400)
 
     log.info(
-        "webhook %s: ipei=%s num=%s",
-        event,
-        body.get("properties", {}).get("ipei"),
-        body.get("currentNumber"),
+        "webhook %s: %s -> %d (%s)",
+        config.event,
+        config.properties.ipei,
+        config.currentNumber,
+        config.properties.name,
     )
 
     try:
-        config = DeviceConfig.from_json(body)
         async with swap_lock:
             await reconcile_device(client, config)
     except Exception as e:
+        log.exception("webhook: reconcile failed")
         return JSONResponse({"error": str(e)}, status_code=400)
 
     return JSONResponse({"ok": True})
