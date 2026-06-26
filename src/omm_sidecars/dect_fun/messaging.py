@@ -35,18 +35,16 @@ log = logging.getLogger(__name__)
 
 @dataclass
 class MessageBody:
-    to: int
-    fromNumber: int
+    to: str
+    fromNumber: str
     content: str
     fromName: str | None = None
 
     @classmethod
     def from_json(cls, data: dict[str, Any]) -> "MessageBody":
-        for field in ("to", "fromNumber"):
-            if not isinstance(data.get(field), int):
-                raise ValueError(
-                    f"{field}: expected int, got {type(data.get(field)).__name__}"
-                )
+        for field in ("to", "fromNumber", "content"):
+            if not isinstance(data.get(field), str):
+                raise ValueError(f"{field}: expected str, got {type(data.get(field)).__name__}")
         return cls(**data)
 
 
