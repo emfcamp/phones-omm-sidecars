@@ -44,7 +44,9 @@ class MessageBody:
     def from_json(cls, data: dict[str, Any]) -> "MessageBody":
         for field in ("to", "fromNumber", "content"):
             if not isinstance(data.get(field), str):
-                raise ValueError(f"{field}: expected str, got {type(data.get(field)).__name__}")
+                raise ValueError(
+                    f"{field}: expected str, got {type(data.get(field)).__name__}"
+                )
         return cls(**data)
 
 
@@ -80,13 +82,13 @@ async def _handle_inbound(client: OMMClient2, request: Request) -> JSONResponse:
         await client.request(SendMessage(msg=[msg]))
     except exceptions.OMResponseException as e:
         status = AXI_ERROR_MAP.get(type(e), 500)
-        log.warning("inbound failed: %d → %d: %s", body.fromNumber, body.to, e)
+        log.warning("inbound failed: %s → %s: %s", body.fromNumber, body.to, e)
         return JSONResponse({"error": str(e)}, status_code=status)
     except Exception as e:
-        log.error("inbound failed: %d → %d: %s", body.fromNumber, body.to, e)
+        log.error("inbound failed: %s → %s: %s", body.fromNumber, body.to, e)
         return JSONResponse({"error": str(e)}, status_code=500)
 
-    log.info("inbound: %d → %d", body.fromNumber, body.to)
+    log.info("inbound: %s → %s", body.fromNumber, body.to)
     return JSONResponse({"status": "ok"})
 
 
@@ -97,8 +99,8 @@ async def _relay_outbound(msg: MessageType) -> None:
     """Forward a single DECT-originated message to the SIP core."""
     core_url = os.environ["MESSAGE_TARGET_URL"]
 
-    to = int(msg.toAddr.lower().removeprefix("tel:"))
-    from_number = int(msg.fromAddr.lower().removeprefix("tel:"))
+    to = msg.toAddr.lower().removeprefix("tel:")
+    from_number = msg.fromAddr.lower().removeprefix("tel:")
 
     body = MessageBody(
         to=to,
@@ -117,14 +119,14 @@ async def _relay_outbound(msg: MessageType) -> None:
         )
         if resp.status_code >= 400:
             log.warning(
-                "outbound failed: %d → %d: %d %s",
+                "outbound failed: %s → %s: %d %s",
                 from_number,
                 to,
                 resp.status_code,
                 resp.text,
             )
             return
-        log.info("outbound: %d → %d", from_number, to)
+        log.info("outbound: %s → %s", from_number, to)
 
 
 async def _listen_outbound(client: OMMClient2) -> None:
