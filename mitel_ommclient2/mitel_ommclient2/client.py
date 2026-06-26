@@ -271,6 +271,13 @@ class OMMClient2:
         )
         return await self.request(m)
 
+    # -- messaging --
+
+    async def send_message(self, msg: types.MessageType):
+        """Send a message to a DECT phone."""
+        m = messages.SendMessage(msg=[msg])
+        return await self.request(m)
+
     # -- DECT subscription --
 
     async def get_dect_auth_code(self) -> str:

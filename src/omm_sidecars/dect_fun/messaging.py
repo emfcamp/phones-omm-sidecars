@@ -24,7 +24,7 @@ from omm_sidecars._auth import BearerAuthMiddleware
 
 from mitel_ommclient2 import exceptions
 from mitel_ommclient2.client import OMMClient2
-from mitel_ommclient2.messages import EventMessageSend, SendMessage
+from mitel_ommclient2.messages import EventMessageSend
 from mitel_ommclient2.types import MessageType
 
 log = logging.getLogger(__name__)
@@ -79,7 +79,7 @@ async def _handle_inbound(client: OMMClient2, request: Request) -> JSONResponse:
     )
 
     try:
-        await client.request(SendMessage(msg=[msg]))
+        await client.send_message(msg)
     except exceptions.OMResponseException as e:
         status = AXI_ERROR_MAP.get(type(e), 500)
         log.warning("inbound failed: %s → %s: %s", body.fromNumber, body.to, e)
@@ -95,7 +95,25 @@ async def _handle_inbound(client: OMMClient2, request: Request) -> JSONResponse:
 # -- outbound: DECT → core --
 
 
-async def _relay_outbound(msg: MessageType) -> None:
+async def _notify_failure(
+    client: OMMClient2, msg: MessageType, to: str, reason: str
+) -> None:
+    """Send a delivery failure notification back to the DECT sender."""
+    failure = MessageType(
+        sendTime=int(time.time()),
+        toAddr=msg.fromAddr,
+        fromAddr=f"tel:{to}",
+        fromName="Delivery Failed",
+        content=f"Failed to deliver to {to}: {reason}",
+        priority="Normal",
+    )
+    try:
+        await client.send_message(failure)
+    except Exception as e:
+        log.error("failed to notify sender %s: %s", msg.fromAddr, e)
+
+
+async def _relay_outbound(client: OMMClient2, msg: MessageType) -> None:
     """Forward a single DECT-originated message to the SIP core."""
     core_url = os.environ["MESSAGE_TARGET_URL"]
 
@@ -125,6 +143,13 @@ async def _relay_outbound(msg: MessageType) -> None:
                 resp.status_code,
                 resp.text,
             )
+            try:
+                reason = resp.json().get("error", "")
+            except Exception:
+                reason = ""
+            if not reason:
+                reason = f"HTTP {resp.status_code}"
+            await _notify_failure(client, msg, to, reason)
             return
         log.info("outbound: %s → %s", from_number, to)
 
@@ -137,7 +162,7 @@ async def _listen_outbound(client: OMMClient2) -> None:
     async for event in client.events(EventMessageSend):
         for msg in event.msg:
             try:
-                await _relay_outbound(msg)
+                await _relay_outbound(client, msg)
             except Exception as e:
                 log.error("outbound failed: %s → %s: %s", msg.fromAddr, msg.toAddr, e)
 
