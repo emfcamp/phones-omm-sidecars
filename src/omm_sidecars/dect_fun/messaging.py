@@ -10,6 +10,7 @@ import os
 import time
 from dataclasses import dataclass
 from functools import partial
+from typing import Any
 
 import httpx
 import uvicorn
@@ -40,10 +41,12 @@ class MessageBody:
     fromName: str | None = None
 
     @classmethod
-    def from_json(cls, data: dict) -> "MessageBody":
+    def from_json(cls, data: dict[str, Any]) -> "MessageBody":
         for field in ("to", "fromNumber"):
             if not isinstance(data.get(field), int):
-                raise ValueError(f"{field}: expected int, got {type(data.get(field)).__name__}")
+                raise ValueError(
+                    f"{field}: expected int, got {type(data.get(field)).__name__}"
+                )
         return cls(**data)
 
 
@@ -115,7 +118,13 @@ async def _relay_outbound(msg: MessageType) -> None:
             timeout=10,
         )
         if resp.status_code >= 400:
-            log.warning("outbound failed: %d → %d: %d %s", from_number, to, resp.status_code, resp.text)
+            log.warning(
+                "outbound failed: %d → %d: %d %s",
+                from_number,
+                to,
+                resp.status_code,
+                resp.text,
+            )
             return
         log.info("outbound: %d → %d", from_number, to)
 
