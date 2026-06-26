@@ -217,6 +217,15 @@ async def device_event_handler(client: OMMClient2) -> None:
         pp = event.pp[0]
         if pp.uid != 0:
             continue
+
+        # Event doesn't include IPEI, fetch full device info
+        try:
+            dev_resp = await client.get_pp_dev(pp.ppn)
+            pp = dev_resp.pp[0]
+        except Exception:
+            log.exception("failed to get device info for ppn=%d", pp.ppn)
+            continue
+
         if not pp.ipei:
             log.warning("ppn %d has no IPEI, skipping", pp.ppn)
             continue
