@@ -166,6 +166,11 @@ class OMMClient2:
             m.maxRecords = max_records
         return await self.request(m)
 
+    async def get_pp_dev_by_ipei(self, ipei: str):
+        """Get a DECT phone device by IPEI."""
+        m = messages.GetPPDevByIPEI(ipei=ipei)
+        return await self.request(m)
+
     async def delete_pp_dev(self, ppn: int):
         """Delete a DECT phone device."""
         m = messages.DeletePPDev()

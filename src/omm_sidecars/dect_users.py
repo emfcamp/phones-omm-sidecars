@@ -13,7 +13,7 @@ Exposes a webhook endpoint for the SIP core to notify us of bind/unbind events.
 import asyncio
 import logging
 import os
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from functools import partial
 from typing import Any
 
@@ -78,36 +78,37 @@ async def subscription_loop(client: OMMClient2) -> None:
 
 
 @dataclass
-class WebhookProperties:
+class DeviceProperties:
+    ipei: str
     name: str = ""
     encryption: bool = False
 
-
-@dataclass
-class WebhookBody:
-    event: str
-    vanityNumber: int
-    tempNumber: int
-    properties: WebhookProperties = field(default_factory=WebhookProperties)
-
     @classmethod
-    def from_json(cls, data: Any) -> "WebhookBody":
+    def from_json(cls, data: Any) -> "DeviceProperties":
         return cls(
-            event=data["event"],
-            vanityNumber=data["vanityNumber"],
-            tempNumber=data["tempNumber"],
-            properties=WebhookProperties(**data.get("properties", {})),
+            ipei=data["ipei"],
+            name=data.get("name", ""),
+            encryption=data.get("encryption", False),
         )
 
 
 @dataclass
-class TempNumberResult:
-    tempNumber: int
+class DeviceConfig:
+    currentNumber: int
     sipUsername: str
+    properties: DeviceProperties
+
+    @classmethod
+    def from_json(cls, data: Any) -> "DeviceConfig":
+        return cls(
+            currentNumber=data["currentNumber"],
+            sipUsername=data["sipUsername"],
+            properties=DeviceProperties.from_json(data.get("properties", {})),
+        )
 
 
-async def assign_temp_number(ipei: str) -> TempNumberResult:
-    """Call SIP core API to assign a temp number for a DECT device."""
+async def pull_device_config(ipei: str) -> DeviceConfig:
+    """Call SIP core API to get expected config for a DECT device."""
     api_url = os.environ["CORE_API_URL"]
     api_token = os.environ["CORE_API_TOKEN"]
 
@@ -119,11 +120,7 @@ async def assign_temp_number(ipei: str) -> TempNumberResult:
             timeout=10,
         )
         resp.raise_for_status()
-        data = resp.json()
-        return TempNumberResult(
-            tempNumber=data["tempNumber"],
-            sipUsername=data["sipUsername"],
-        )
+        return DeviceConfig.from_json(resp.json())
 
 
 async def set_device_user(
@@ -147,40 +144,70 @@ async def set_device_user(
     new_uid = resp.user[0].uid
     log.info("created user uid=%d num=%s", new_uid, new_user.num)
 
-    # If swapping from old user, delete it (unbinds device) in lock
+    # If swapping from old user, delete it (unbinds device)
     if old_uid:
-        async with swap_lock:
-            await client.delete_pp_user(uid=old_uid)
-            await client.bind_user_device(new_uid, ppn)
+        await client.delete_pp_user(uid=old_uid)
+        await client.bind_user_device(new_uid, ppn)
     else:
         await client.bind_user_device(new_uid, ppn)
 
     return new_uid
 
 
-async def provision_device(client: OMMClient2, ppn: int) -> None:
-    """Assign a temp number and bind to a device."""
-    # Re-check device state inside lock to ignore intermediate states
+async def reconcile_device(client: OMMClient2, config: DeviceConfig) -> None:
+    """Reconcile OMM state with expected config from SIP core."""
+    ipei = config.properties.ipei
+
     async with swap_lock:
-        resp = await client.get_pp_dev(ppn)
-        pp = resp.pp[0]
+        # Get device by IPEI
+        try:
+            resp = await client.get_pp_dev_by_ipei(ipei)
+            dev = resp.pp[0]
+        except Exception:
+            log.warning("device not found for ipei=%s", ipei)
+            return
 
-    if pp.uid != 0:
-        log.debug("ppn %d already has user uid=%d, skipping", ppn, pp.uid)
-        return
-    if not pp.ipei:
-        log.warning("ppn %d has no IPEI, skipping", ppn)
-        return
+        # Get current user state
+        current_user: types.PPUserType | None = None
+        if dev.uid is not None and dev.uid != 0:
+            try:
+                user_resp = await client.get_pp_user(dev.uid)
+                current_user = user_resp.user[0]
+            except Exception:
+                pass
 
-    result = await assign_temp_number(pp.ipei)
+        # Swap user if number or SIP username changed
+        needs_swap = (
+            current_user is None
+            or current_user.num != str(config.currentNumber)
+            or current_user.sipAuthId != config.sipUsername
+        )
+        if needs_swap:
+            new_user = types.PPUserType(
+                num=str(config.currentNumber),
+                name=config.properties.name,
+                sipAuthId=config.sipUsername,
+            )
+            await set_device_user(
+                client, dev.ppn, new_user, old_uid=dev.uid if dev.uid else None
+            )
+        else:
+            # Same user, just update name
+            assert current_user is not None
+            await client.set_pp_user(
+                types.PPUserType(uid=current_user.uid, name=config.properties.name)
+            )
 
-    user = types.PPUserType(num=str(result.tempNumber), sipAuthId=result.sipUsername)
-    await set_device_user(client, ppn, user)
-    log.info("provisioned ppn=%d -> num=%d", ppn, result.tempNumber)
+        # Always update device properties
+        await client.set_pp_dev(
+            types.PPDevType(ppn=dev.ppn, encrypt=config.properties.encryption)
+        )
+
+    log.info("reconciled ipei=%s ppn=%d num=%d", ipei, dev.ppn, config.currentNumber)
 
 
 async def device_event_handler(client: OMMClient2) -> None:
-    """Create provisional users for unbound devices."""
+    """Pull config from SIP core and reconcile for unbound devices."""
     log.info("subscribing to PPDevCnf")
     await client.subscribe(EventPPDevCnf, ppn=-1)
 
@@ -190,82 +217,34 @@ async def device_event_handler(client: OMMClient2) -> None:
         pp = event.pp[0]
         if pp.uid != 0:
             continue
+        if not pp.ipei:
+            log.warning("ppn %d has no IPEI, skipping", pp.ppn)
+            continue
 
         try:
-            await provision_device(client, pp.ppn)
+            config = await pull_device_config(pp.ipei)
+            await reconcile_device(client, config)
         except Exception:
-            log.exception("provisioning failed for ppn=%d", pp.ppn)
-
-
-async def apply_dev_properties(
-    client: OMMClient2,
-    ppn: int,
-    properties: WebhookProperties,
-) -> None:
-    """Apply device properties."""
-    pp = types.PPDevType(ppn=ppn, encrypt=properties.encryption)
-    await client.set_pp_dev(pp)
-
-
-async def update_properties(
-    client: OMMClient2,
-    vanity: int,
-    properties: WebhookProperties,
-) -> None:
-    """Update user and device properties for a vanity number."""
-    resp = await client.get_pp_user_by_number(str(vanity))
-    user = resp.user[0]
-    if user.ppn is None:
-        raise ValueError(f"user {vanity} has no ppn")
-
-    await client.set_pp_user(types.PPUserType(uid=user.uid, name=properties.name))
-    await apply_dev_properties(client, user.ppn, properties)
-
-
-async def move_user(
-    client: OMMClient2,
-    old_num: int,
-    new_num: int,
-    new_properties: WebhookProperties,
-) -> None:
-    """Move a user from old_num to new_num with the given properties."""
-    resp = await client.get_pp_user_by_number(str(old_num))
-    old_user = resp.user[0]
-    if old_user.ppn is None:
-        raise ValueError(f"user {old_num} has no ppn")
-
-    new_user = types.PPUserType(num=str(new_num), name=new_properties.name)
-    await set_device_user(client, old_user.ppn, new_user, old_uid=old_user.uid)
-
-    await apply_dev_properties(client, old_user.ppn, new_properties)
+            log.exception("reconcile failed for ppn=%d", pp.ppn)
 
 
 async def handle_webhook(client: OMMClient2, request: Request) -> JSONResponse:
-    """Handle bind/unbind webhooks from the SIP core."""
-    body = WebhookBody.from_json(await request.json())
+    """Handle webhooks from the SIP core."""
+    body = await request.json()
+    event = body.get("event")
 
     log.info(
-        "webhook %s: temp=%d vanity=%d", body.event, body.tempNumber, body.vanityNumber
+        "webhook %s: ipei=%s num=%s",
+        event,
+        body.get("properties", {}).get("ipei"),
+        body.get("currentNumber"),
     )
 
     try:
-        match body.event:
-            case "bind":
-                await move_user(
-                    client, body.tempNumber, body.vanityNumber, body.properties
-                )
-            case "unbind":
-                await move_user(
-                    client, body.vanityNumber, body.tempNumber, WebhookProperties()
-                )
-            case "properties":
-                await update_properties(client, body.vanityNumber, body.properties)
-            case _:
-                return JSONResponse(
-                    {"error": f"unknown event: {body.event}"}, status_code=400
-                )
+        config = DeviceConfig.from_json(body)
+        await reconcile_device(client, config)
     except Exception as e:
-        return JSONResponse({"error": str(e)}, status_code=404)
+        return JSONResponse({"error": str(e)}, status_code=400)
 
     return JSONResponse({"ok": True})
 
@@ -280,13 +259,14 @@ async def _main() -> None:
     async with OMMClient2(host, user, password, ommsync=True) as client:
         log.info("connected, version=%s", client.open_resp.ommVersion)
 
-        async def provision_orphaned_devices() -> None:
+        async def reconcile_orphaned_devices() -> None:
             async for dev in client.pp_devs():
-                if dev.uid == 0:
+                if dev.uid == 0 and dev.ipei:
                     try:
-                        await provision_device(client, dev.ppn)
+                        config = await pull_device_config(dev.ipei)
+                        await reconcile_device(client, config)
                     except Exception:
-                        log.exception("startup provisioning failed for ppn=%d", dev.ppn)
+                        log.exception("startup reconcile failed for ppn=%d", dev.ppn)
 
         app = Starlette(
             routes=[
@@ -303,7 +283,7 @@ async def _main() -> None:
             tg.create_task(subscription_loop(client))
             tg.create_task(device_event_handler(client))
             tg.create_task(server.serve())
-            tg.create_task(provision_orphaned_devices())
+            tg.create_task(reconcile_orphaned_devices())
 
 
 def main() -> None:

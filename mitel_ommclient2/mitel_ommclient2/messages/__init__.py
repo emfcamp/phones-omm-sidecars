@@ -25,6 +25,7 @@ from .getdectsubscriptionmode import (
 )
 from .getdevautocreate import GetDevAutoCreate, GetDevAutoCreateResp
 from .getppdev import GetPPDev, GetPPDevResp
+from .getppdevbyipei import GetPPDevByIPEI, GetPPDevByIPEIResp
 from .getppdevsummary import GetPPDevSummary, GetPPDevSummaryResp
 from .getppuser import GetPPUser, GetPPUserResp
 from .getppuserbynumber import GetPPUserByNumber, GetPPUserByNumberResp
@@ -117,6 +118,8 @@ __all__ = [
     "GetDevAutoCreateResp",
     "GetPPDev",
     "GetPPDevResp",
+    "GetPPDevByIPEI",
+    "GetPPDevByIPEIResp",
     "GetPPDevSummary",
     "GetPPDevSummaryResp",
     "GetPPUser",
