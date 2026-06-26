@@ -155,53 +155,52 @@ async def set_device_user(
 
 
 async def reconcile_device(client: OMMClient2, config: DeviceConfig) -> None:
-    """Reconcile OMM state with expected config from SIP core."""
+    """Reconcile OMM state with expected config from SIP core. Caller holds swap_lock."""
     ipei = config.properties.ipei
 
-    async with swap_lock:
-        # Get device by IPEI
+    # Get device by IPEI
+    try:
+        resp = await client.get_pp_dev_by_ipei(ipei)
+        dev = resp.pp[0]
+    except Exception:
+        log.warning("device not found for ipei=%s", ipei)
+        return
+
+    # Get current user state
+    current_user: types.PPUserType | None = None
+    if dev.uid is not None and dev.uid != 0:
         try:
-            resp = await client.get_pp_dev_by_ipei(ipei)
-            dev = resp.pp[0]
+            user_resp = await client.get_pp_user(dev.uid)
+            current_user = user_resp.user[0]
         except Exception:
-            log.warning("device not found for ipei=%s", ipei)
-            return
+            pass
 
-        # Get current user state
-        current_user: types.PPUserType | None = None
-        if dev.uid is not None and dev.uid != 0:
-            try:
-                user_resp = await client.get_pp_user(dev.uid)
-                current_user = user_resp.user[0]
-            except Exception:
-                pass
-
-        # Swap user if number or SIP username changed
-        needs_swap = (
-            current_user is None
-            or current_user.num != str(config.currentNumber)
-            or current_user.sipAuthId != config.sipUsername
+    # Swap user if number or SIP username changed
+    needs_swap = (
+        current_user is None
+        or current_user.num != str(config.currentNumber)
+        or current_user.sipAuthId != config.sipUsername
+    )
+    if needs_swap:
+        new_user = types.PPUserType(
+            num=str(config.currentNumber),
+            name=config.properties.name,
+            sipAuthId=config.sipUsername,
         )
-        if needs_swap:
-            new_user = types.PPUserType(
-                num=str(config.currentNumber),
-                name=config.properties.name,
-                sipAuthId=config.sipUsername,
-            )
-            await set_device_user(
-                client, dev.ppn, new_user, old_uid=dev.uid if dev.uid else None
-            )
-        else:
-            # Same user, just update name
-            assert current_user is not None
-            await client.set_pp_user(
-                types.PPUserType(uid=current_user.uid, name=config.properties.name)
-            )
-
-        # Always update device properties
-        await client.set_pp_dev(
-            types.PPDevType(ppn=dev.ppn, encrypt=config.properties.encryption)
+        await set_device_user(
+            client, dev.ppn, new_user, old_uid=dev.uid if dev.uid else None
         )
+    else:
+        # Same user, just update name
+        assert current_user is not None
+        await client.set_pp_user(
+            types.PPUserType(uid=current_user.uid, name=config.properties.name)
+        )
+
+    # Always update device properties
+    await client.set_pp_dev(
+        types.PPDevType(ppn=dev.ppn, encrypt=config.properties.encryption)
+    )
 
     log.info("reconciled ipei=%s ppn=%d num=%d", ipei, dev.ppn, config.currentNumber)
 
@@ -218,23 +217,27 @@ async def device_event_handler(client: OMMClient2) -> None:
         if pp.uid != 0:
             continue
 
-        # Event doesn't include IPEI, fetch full device info
-        try:
-            dev_resp = await client.get_pp_dev(pp.ppn)
-            pp = dev_resp.pp[0]
-        except Exception:
-            log.exception("failed to get device info for ppn=%d", pp.ppn)
-            continue
+        async with swap_lock:
+            # Event doesn't include IPEI, fetch full device info
+            try:
+                dev_resp = await client.get_pp_dev(pp.ppn)
+                pp = dev_resp.pp[0]
+            except Exception:
+                log.exception("failed to get device info for ppn=%d", pp.ppn)
+                continue
 
-        if not pp.ipei:
-            log.warning("ppn %d has no IPEI, skipping", pp.ppn)
-            continue
+            if pp.uid != 0:
+                continue
 
-        try:
-            config = await pull_device_config(pp.ipei)
-            await reconcile_device(client, config)
-        except Exception:
-            log.exception("reconcile failed for ppn=%d", pp.ppn)
+            if not pp.ipei:
+                log.warning("ppn %d has no IPEI, skipping", pp.ppn)
+                continue
+
+            try:
+                config = await pull_device_config(pp.ipei)
+                await reconcile_device(client, config)
+            except Exception:
+                log.exception("reconcile failed for ppn=%d", pp.ppn)
 
 
 async def handle_webhook(client: OMMClient2, request: Request) -> JSONResponse:
@@ -251,7 +254,8 @@ async def handle_webhook(client: OMMClient2, request: Request) -> JSONResponse:
 
     try:
         config = DeviceConfig.from_json(body)
-        await reconcile_device(client, config)
+        async with swap_lock:
+            await reconcile_device(client, config)
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=400)
 
