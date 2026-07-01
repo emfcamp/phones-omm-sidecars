@@ -79,6 +79,9 @@ async def _initial_poll(client: OMMClient2) -> None:
 
 def _update_gauges(rfp: RFPType) -> None:
     rfp_id = str(rfp.id)
+    old_name = rfp_names.get(rfp.id)
+    if old_name and old_name != rfp.name:
+        rfp_info.labels(rfp_id, old_name).remove()
     rfp_names[rfp.id] = rfp.name
     rfp_info.labels(rfp_id, rfp.name).set(1)
     rfp_connected.labels(rfp_id).set(int(rfp.connected or False))
