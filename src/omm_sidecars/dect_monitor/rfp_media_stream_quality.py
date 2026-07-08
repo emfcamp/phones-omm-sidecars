@@ -29,7 +29,7 @@ ms_octets_rx = Gauge("dect_rfp_ms_octets_rx", "Audio octets received", ["rfp_id"
 ms_packets_tx = Gauge("dect_rfp_ms_packets_tx", "RTP packets sent", ["rfp_id"])
 ms_octets_tx = Gauge("dect_rfp_ms_octets_tx", "Audio octets sent", ["rfp_id"])
 ms_packets_lost = Gauge(
-    "dect_rfp_ms_packets_lost", "Percent of packets lost", ["rfp_id"]
+    "dect_rfp_ms_packets_lost", "Cumulative lost packets", ["rfp_id"]
 )
 ms_max_jitter = Gauge("dect_rfp_ms_max_jitter", "Jitter (ms)", ["rfp_id"])
 
