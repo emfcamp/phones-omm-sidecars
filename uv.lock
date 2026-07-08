@@ -151,17 +151,13 @@ dependencies = [
     { name = "uvicorn" },
 ]
 
-[package.optional-dependencies]
-dev = [
-    { name = "pytest" },
-    { name = "pytest-asyncio" },
-    { name = "python-dotenv" },
-]
-
 [package.dev-dependencies]
 dev = [
     { name = "basedpyright" },
+    { name = "pytest" },
+    { name = "pytest-asyncio" },
     { name = "pytest-timeout" },
+    { name = "python-dotenv" },
     { name = "ruff" },
 ]
 
@@ -170,18 +166,17 @@ requires-dist = [
     { name = "httpx", specifier = ">=0.28.1" },
     { name = "mitel-ommclient2", editable = "mitel_ommclient2" },
     { name = "prometheus-client" },
-    { name = "pytest", marker = "extra == 'dev'" },
-    { name = "pytest-asyncio", marker = "extra == 'dev'" },
-    { name = "python-dotenv", marker = "extra == 'dev'" },
     { name = "starlette", specifier = ">=1.3.1" },
     { name = "uvicorn", specifier = ">=0.49.0" },
 ]
-provides-extras = ["dev"]
 
 [package.metadata.requires-dev]
 dev = [
     { name = "basedpyright", specifier = ">=1.39.6" },
+    { name = "pytest" },
+    { name = "pytest-asyncio" },
     { name = "pytest-timeout", specifier = ">=2.4.0" },
+    { name = "python-dotenv" },
     { name = "ruff", specifier = ">=0.15.16" },
 ]
 
