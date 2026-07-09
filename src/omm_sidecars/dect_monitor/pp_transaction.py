@@ -45,6 +45,10 @@ rfp_active_call_legs = Gauge(
     "Active DECT call legs per RFP",
     ["rfp_id"],
 )
+pp_active_1h = Gauge(
+    "dect_pp_active_1h",
+    "PPs with activity in the last hour",
+)
 
 # -- sqlite --
 
@@ -74,6 +78,7 @@ _db = _init_db()
 
 _known_ppns: set[int] = set()
 _current_rfp: dict[int, int] = {}  # ppn → rfp_id
+_active_ppns: dict[int, float] = {}  # ppn → last event timestamp
 
 
 async def _handle_location(client: OMMClient2, request: Request) -> JSONResponse:
@@ -155,6 +160,13 @@ async def _on_event(event: EventPPTransaction) -> None:
         (time.time(), event.ppn, event.trType, event.rfpId),
     )
     _db.commit()
+
+    _active_ppns[event.ppn] = time.time()
+    cutoff = time.time() - 3600
+    stale = [ppn for ppn, ts in _active_ppns.items() if ts < cutoff]
+    for ppn in stale:
+        del _active_ppns[ppn]
+    pp_active_1h.set(len(_active_ppns))
 
     if event.rfpId is not None:
         _update_call_legs(event.ppn, event.trType, event.rfpId)
