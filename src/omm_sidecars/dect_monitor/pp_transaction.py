@@ -168,15 +168,14 @@ async def _on_event(event: EventPPTransaction) -> None:
         del _active_ppns[ppn]
     pp_active_1h.set(len(_active_ppns))
 
-    if event.rfpId is not None:
-        _update_call_legs(event.ppn, event.trType, event.rfpId)
+    _update_call_legs(event.ppn, event.trType, event.rfpId)
 
 
-def _update_call_legs(ppn: int, tr_type: str, rfp_id: int) -> None:
-    if tr_type == "Establish":
+def _update_call_legs(ppn: int, tr_type: str, rfp_id: int | None) -> None:
+    if tr_type == "Establish" and rfp_id is not None:
         _current_rfp[ppn] = rfp_id
         _bump_call_legs(rfp_id, 1)
-    elif tr_type == "ConnHandover":
+    elif tr_type == "ConnHandover" and rfp_id is not None:
         old_rfp = _current_rfp.get(ppn)
         if old_rfp is not None:
             _bump_call_legs(old_rfp, -1)
