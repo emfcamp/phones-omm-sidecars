@@ -179,10 +179,8 @@ def _update_call_legs(ppn: int, tr_type: str, rfp_id: int | None) -> None:
         old_rfp = _current_rfp.get(ppn)
         if old_rfp is not None:
             _bump_call_legs(old_rfp, -1)
-        else:
-            log.warning("ConnHandover for ppn %d without prior Establish", ppn)
-        _current_rfp[ppn] = rfp_id
-        _bump_call_legs(rfp_id, 1)
+            _current_rfp[ppn] = rfp_id
+            _bump_call_legs(rfp_id, 1)
     elif tr_type == "Release":
         old_rfp = _current_rfp.pop(ppn, None)
         if old_rfp is not None:
