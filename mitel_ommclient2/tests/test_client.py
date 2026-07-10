@@ -93,7 +93,7 @@ class TestEvents:
         async for _ in gen:
             break
         await gen.aclose()
-        mock_conn.unregister_listener.assert_called_once_with("EventPPDevCnf")
+        mock_conn.unregister_listener.assert_called_once_with("EventPPDevCnf", queue)
 
     @pytest.mark.asyncio
     async def test_events_yields_from_queue(self, client, mock_conn):

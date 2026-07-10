@@ -58,7 +58,7 @@ class Connection:
         self._writer: asyncio.StreamWriter | None = None
         self._seq: int = 0
         self._pending: dict[int, asyncio.Future[messages.Response]] = {}
-        self._event_listeners: dict[str, asyncio.Queue[messages.Event]] = {}
+        self._event_listeners: dict[str, list[asyncio.Queue[messages.Event]]] = {}
         self._write_lock = asyncio.Lock()
         self._recv_task: asyncio.Task[None] | None = None
 
@@ -109,16 +109,26 @@ class Connection:
         return seq
 
     def register_listener(self, event_type: str) -> asyncio.Queue[messages.Event]:
-        """Register a listener queue for an event type. Returns the queue."""
-        if event_type in self._event_listeners:
-            raise ValueError(f"already listening for {event_type}")
+        """Register a listener queue for an event type. Returns the queue.
+
+        Multiple listeners per event type are supported (fanout).
+        """
         queue: asyncio.Queue[messages.Event] = asyncio.Queue()
-        self._event_listeners[event_type] = queue
+        self._event_listeners.setdefault(event_type, []).append(queue)
         return queue
 
-    def unregister_listener(self, event_type: str) -> None:
-        """Remove a listener for an event type."""
-        self._event_listeners.pop(event_type, None)
+    def unregister_listener(
+        self, event_type: str, queue: asyncio.Queue[messages.Event]
+    ) -> None:
+        """Remove a specific listener queue for an event type."""
+        listeners = self._event_listeners.get(event_type)
+        if listeners is not None:
+            try:
+                listeners.remove(queue)
+            except ValueError:
+                pass
+            if not listeners:
+                del self._event_listeners[event_type]
 
     async def _recv_loop(self) -> None:
         """Background: read null-byte terminated messages, dispatch to pending."""
@@ -154,9 +164,10 @@ class Connection:
                     else:
                         assert isinstance(response, messages.Event)
                         event_name = type(response).__name__
-                        queue = self._event_listeners.get(event_name)
-                        if queue is not None:
-                            queue.put_nowait(response)
+                        queues = self._event_listeners.get(event_name)
+                        if queues:
+                            for queue in queues:
+                                queue.put_nowait(response)
                         else:
                             logger.warning(
                                 "unhandled unsolicited message: %s", event_name

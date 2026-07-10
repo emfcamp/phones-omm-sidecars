@@ -64,3 +64,29 @@ async def test_no_os_exit_on_intentional_close(conn):
         await conn.close()
         await asyncio.sleep(0.5)
         mock_exit.assert_not_called()
+
+
+# -- listener fanout --
+
+
+def test_register_multiple_listeners(conn):
+    """Multiple listeners for the same event type should each get their own queue."""
+    q1 = conn.register_listener("EventTest")
+    q2 = conn.register_listener("EventTest")
+    assert q1 is not q2
+    assert len(conn._event_listeners["EventTest"]) == 2
+
+
+def test_unregister_removes_specific_queue(conn):
+    """Unregister should remove only the specified queue."""
+    q1 = conn.register_listener("EventTest")
+    q2 = conn.register_listener("EventTest")
+    conn.unregister_listener("EventTest", q1)
+    assert conn._event_listeners["EventTest"] == [q2]
+
+
+def test_unregister_last_removes_key(conn):
+    """Unregistering the last listener should remove the event type key."""
+    q = conn.register_listener("EventTest")
+    conn.unregister_listener("EventTest", q)
+    assert "EventTest" not in conn._event_listeners

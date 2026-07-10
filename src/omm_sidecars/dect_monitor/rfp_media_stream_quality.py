@@ -11,7 +11,11 @@ import logging
 from prometheus_client import Gauge
 
 from mitel_ommclient2.client import OMMClient2
-from mitel_ommclient2.messages import EventRFPMediaStreamQuality, EventRFPMsQuality
+from mitel_ommclient2.messages import (
+    EventRFPMediaStreamQuality,
+    EventRFPMsQuality,
+    EventRFPState,
+)
 from mitel_ommclient2.types import MsQualityType
 
 from omm_sidecars.dect_monitor._util import listen
@@ -45,11 +49,23 @@ async def run(client: OMMClient2, tg: asyncio.TaskGroup) -> None:
     log.info("initial state: media stream quality loaded")
 
     tg.create_task(listen(client, EventRFPMediaStreamQuality, _on_event))
+    tg.create_task(listen(client, EventRFPState, _on_state_event))
 
 
 async def _on_event(event: EventRFPMediaStreamQuality) -> None:
     for ms in event.msQuality:
         _update_gauges(ms)
+
+
+async def _on_state_event(event: EventRFPState) -> None:
+    for rfp in event.rfp:
+        if rfp.connected is False:
+            _reset_gauges(str(rfp.id))
+
+
+def _reset_gauges(rfp_id: str) -> None:
+    """Reset live-state gauges on disconnect. Cumulative gauges are preserved."""
+    ms_max_jitter.labels(rfp_id).set(0)
 
 
 def _update_gauges(ms: MsQualityType) -> None:

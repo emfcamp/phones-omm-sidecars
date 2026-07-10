@@ -11,7 +11,7 @@ import logging
 from prometheus_client import Gauge
 
 from mitel_ommclient2.client import OMMClient2
-from mitel_ommclient2.messages import EventRFPIpQuality
+from mitel_ommclient2.messages import EventRFPIpQuality, EventRFPState
 from mitel_ommclient2.types import IpQualityType
 
 from omm_sidecars.dect_monitor._util import listen
@@ -57,11 +57,24 @@ async def run(client: OMMClient2, tg: asyncio.TaskGroup) -> None:
     log.info("initial state: IP quality loaded")
 
     tg.create_task(listen(client, EventRFPIpQuality, _on_event))
+    tg.create_task(listen(client, EventRFPState, _on_state_event))
 
 
 async def _on_event(event: EventRFPIpQuality) -> None:
     for iq in event.ipQuality:
         _update_gauges(iq)
+
+
+async def _on_state_event(event: EventRFPState) -> None:
+    for rfp in event.rfp:
+        if rfp.connected is False:
+            _reset_gauges(str(rfp.id))
+
+
+def _reset_gauges(rfp_id: str) -> None:
+    """Reset live-state gauges on disconnect. Cumulative gauges are preserved."""
+    ip_connected_time.labels(rfp_id).set(0)
+    ip_current_rtt.labels(rfp_id).set(0)
 
 
 def _update_gauges(iq: IpQualityType) -> None:

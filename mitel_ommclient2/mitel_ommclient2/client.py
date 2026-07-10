@@ -365,9 +365,10 @@ class OMMClient2:
         return await self.request(messages.Subscribe(e=[cmd]))
 
     async def events(self, event_cls: type[EventT]) -> AsyncGenerator[EventT, None]:
-        """Async iterator over events of a given type. One listener per event_type.
+        """Async iterator over events of a given type.
 
-        Events arrive on the wire with an "Event" prefix which is added automatically.
+        Multiple callers can listen for the same event type (fanout).
+        Each gets its own queue with a copy of every event.
         """
         assert self._conn is not None
         event_name = event_cls.__name__
@@ -378,7 +379,7 @@ class OMMClient2:
                 assert isinstance(event, event_cls)
                 yield event
         finally:
-            self._conn.unregister_listener(event_name)
+            self._conn.unregister_listener(event_name, queue)
 
     # -- iterators --
 

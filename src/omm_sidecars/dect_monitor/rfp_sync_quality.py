@@ -11,7 +11,7 @@ import logging
 from prometheus_client import Gauge
 
 from mitel_ommclient2.client import OMMClient2
-from mitel_ommclient2.messages import EventRFPSyncQuality
+from mitel_ommclient2.messages import EventRFPSyncQuality, EventRFPState
 from mitel_ommclient2.types import SyncQualityType
 
 from omm_sidecars.dect_monitor._util import listen
@@ -53,11 +53,26 @@ async def run(client: OMMClient2, tg: asyncio.TaskGroup) -> None:
     log.info("initial state: sync quality loaded")
 
     tg.create_task(listen(client, EventRFPSyncQuality, _on_event))
+    tg.create_task(listen(client, EventRFPState, _on_state_event))
 
 
 async def _on_event(event: EventRFPSyncQuality) -> None:
     for sq in event.syncQuality:
         _update_gauges(sq)
+
+
+async def _on_state_event(event: EventRFPState) -> None:
+    for rfp in event.rfp:
+        if rfp.connected is False:
+            _reset_gauges(str(rfp.id))
+
+
+def _reset_gauges(rfp_id: str) -> None:
+    """Reset all sync quality gauges on disconnect."""
+    sync_strong_rels.labels(rfp_id).set(0)
+    sync_low_rels.labels(rfp_id).set(0)
+    sync_max_rssi.labels(rfp_id).set(0)
+    sync_min_rssi.labels(rfp_id).set(0)
 
 
 def _update_gauges(sq: SyncQualityType) -> None:
