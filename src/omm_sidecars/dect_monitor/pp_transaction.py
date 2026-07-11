@@ -130,6 +130,7 @@ async def run(client: OMMClient2, app: Starlette, tg: asyncio.TaskGroup) -> None
     log.info("subscribed to PPTransaction")
 
     tg.create_task(listen(client, EventPPTransaction, _on_event))
+    tg.create_task(_poll_call_state(client))
 
     app.routes.append(Route("/location", partial(_handle_location, client)))
 
@@ -201,3 +202,23 @@ def _bump_call_legs(rfp_id: int, delta: int) -> None:
 
 
 _active_call_legs: dict[str, int] = {}
+
+
+async def _poll_call_state(client: OMMClient2) -> None:
+    """Periodically check call state for PPs with active call legs."""
+    while True:
+        await asyncio.sleep(60)
+        for ppn in list(_current_rfp.keys()):
+            try:
+                resp = await client.get_pp_state(ppn)
+            except Exception:
+                log.warning("GetPPState failed for ppn=%d", ppn, exc_info=True)
+                continue
+            if resp.callState is not None and resp.callState.value in ("idle", "none"):
+                old_rfp = _current_rfp.pop(ppn, None)
+                if old_rfp is not None:
+                    _bump_call_legs(old_rfp, -1)
+                    log.warning(
+                        "phantom call leg: ppn=%d rfp=%d callState=%s",
+                        ppn, old_rfp, resp.callState,
+                    )

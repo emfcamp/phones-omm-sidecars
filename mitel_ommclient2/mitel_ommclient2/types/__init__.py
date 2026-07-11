@@ -56,6 +56,10 @@ class RFPSyncStateType(EnumType):
     VALUES = ["Inactive", "NotSynced", "Searching", "Synced"]
 
 
+class PPUserCallStateType(EnumType):
+    VALUES = ["ringing", "calling", "paging", "connected", "idle", "none"]
+
+
 # -- child types (dataclasses) --
 
 

@@ -197,6 +197,10 @@ class OMMClient2:
             messages.GetPPFirmwareUpdateStatus(ppn=ppn, maxRecords=max_records)
         )
 
+    async def get_pp_state(self, ppn: int):
+        """Get current state (call state, battery, etc.) for a DECT phone."""
+        return await self.request(messages.GetPPState(ppn=ppn))
+
     async def get_rfp(
         self,
         rfp_id: int,

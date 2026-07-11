@@ -30,6 +30,7 @@ from .getppdevsummary import GetPPDevSummary, GetPPDevSummaryResp
 from .getppuser import GetPPUser, GetPPUserResp
 from .getppuserbynumber import GetPPUserByNumber, GetPPUserByNumberResp
 from .getppusersummary import GetPPUserSummary, GetPPUserSummaryResp
+from .getppstate import GetPPState, GetPPStateResp
 from .getpublickey import GetPublicKey, GetPublicKeyResp
 from .getrfp import GetRFP, GetRFPResp
 from .getrfpipquality import GetRFPIpQuality, GetRFPIpQualityResp
@@ -168,4 +169,6 @@ __all__ = [
     "GetPPFirmwareUpdateOverviewResp",
     "GetPPFirmwareUpdateStatus",
     "GetPPFirmwareUpdateStatusResp",
+    "GetPPState",
+    "GetPPStateResp",
 ]
