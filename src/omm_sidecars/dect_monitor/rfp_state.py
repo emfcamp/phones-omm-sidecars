@@ -81,7 +81,7 @@ def _update_gauges(rfp: RFPType) -> None:
     rfp_id = str(rfp.id)
     old_name = rfp_names.get(rfp.id)
     if old_name is not None and old_name != rfp.name:
-        rfp_info.labels(rfp_id, old_name).remove()
+        rfp_info.remove(rfp_id, old_name)
     rfp_names[rfp.id] = rfp.name
     rfp_info.labels(rfp_id, rfp.name).set(1)
     rfp_connected.labels(rfp_id).set(int(rfp.connected or False))
