@@ -1,12 +1,14 @@
 # phones-omm-sidecars
 
-This is a collection of applications / containers that expose an API to manage the Mitel OMM DECT Controller.
+This is a collection of applications and a container that expose an API to manage the Mitel OMM DECT Controller.
 
 **Inbound** requests are made from the phones-web service to the OMM sidecars that listen on `HTTP_PORT` (defaults to `8080`).
 
 **Outbound** requests are made from the OMM sidecars to the phones-web service.
 
-## dect-users
+## Applications
+
+### dect-users
 
 * Runs a keep-alive loop that ensures DECT subscription settings are correct, and re-applies if they have changed externally (e.g. via web UI):
   * auth code is "0000"
@@ -15,7 +17,7 @@ This is a collection of applications / containers that expose an API to manage t
 * Listens for PPDevCnf events and assigns temporary numbers to new DECT handsets by calling the phones-web temp number API.
 * Exposes a webhook endpoint for phones-web to notify when a user claims a vanity number or updates settings.
 
-#### `POST /webhook` — inbound
+**`POST /webhook` — inbound**
 
 Called by phones-web to notify OMM when a user claims a vanity number or updates settings.
 
@@ -47,7 +49,7 @@ Non-200 responses are `{"error": "<message>"}` with one of these statuses:
 |---|---|
 | 400 | Malformed body or reconcile failure |
 
-#### `POST {CORE_API_URL}/temp-numbers/assign/dect` — outbound
+**`POST {CORE_API_URL}/temp-numbers/assign/dect` — outbound**
 
 Called by the sidecar to phones-web to allocate a temporary number to a newly registered DECT handset.
 
@@ -72,14 +74,14 @@ Called by the sidecar to phones-web to allocate a temporary number to a newly re
 }
 ```
 
-## dect-monitor
+### dect-monitor
 
 Exposes: 
 * OMM system health metrics in the prometheus format
 * Mitel Handset firmware version
 * The last known RFP a handset was connected to
 
-#### `GET /metrics` — inbound
+**`GET /metrics` — inbound**
 
 Prometheus gauges/counters for OMM system health, on `OMM_PROM_PORT`
 (default `8000`). No authentication.
@@ -94,7 +96,7 @@ dect_pp_active_1h 14.0
 dect_rfp_active_call_legs{rfp_id="3"} 1.0
 ```
 
-#### `GET /firmware?num=<number>` — inbound
+**`GET /firmware?num=<number>` — inbound**
 
 Gets the firmware status of a Mitel DECT handset
 
@@ -120,7 +122,7 @@ Non-200 responses are `{"error": "<message>"}` with one of these statuses:
 | 404 | No such user, or user has no bound device |
 | 502 | Firmware status lookup failed |
 
-#### `GET /location?num=<number>` — inbound
+**`GET /location?num=<number>` — inbound**
 
 Gets the last known RFP a DECT Handset was connected to
 
@@ -145,11 +147,11 @@ Non-200 responses are `{"error": "<message>"}` with one of these statuses:
 | 400 | Invalid request |
 | 404 | No such user, unbound device, or no location |
 
-## dect-fun
+### dect-fun
 
 Messaging bridge between DECT phones and the phones-web
 
-#### `POST /message` — inbound
+**`POST /message` — inbound**
 
 Called by phones-web to send an SMS message to a Mitel DECT handset.
 
@@ -181,7 +183,7 @@ Non-200 responses are `{"error": "<message>"}` with one of these statuses:
 | 503 | The queue for this DECT handset is full. |
 | 500 | Unexpected failure |
 
-#### `POST {MESSAGE_TARGET_URL}` — outbound
+**`POST {MESSAGE_TARGET_URL}` — outbound**
 
 Called by the sidecar to relay an SMS sent by a DECT handset to phones-web
 
@@ -202,3 +204,13 @@ Called by the sidecar to relay an SMS sent by a DECT handset to phones-web
 |---|---|
 | `<400` | Success |
 | `>=400` | Sends a "Delivery Failed" message back to the DECT handset|
+
+
+## Attribution
+
+This software utilises [mitel_ommclient2](https://git.clerie.de/clerie/mitel_ommclient2) which was inspired by [python-mitel](https://github.com/eventphone/python-mitel)
+
+## License
+
+* This project is licensed under the AGPL3 license
+* mitel_ommclient2 is licensed under the MIT license
