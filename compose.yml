@@ -2,8 +2,47 @@ services:
   dect-users:
     image: ghcr.io/emfcamp/phones-omm-sidecars:latest
     restart: unless-stopped
+    ports:
+      - 8080:8080
     environment:
-      OMM_HOST: 127.0.0.1
-      OMM_USER: admin
-      OMM_PASS: secret
+      OMM_HOST: omm.phones.emf.camp
+      OMM_USER: dect-users
+      OMM_PASS: "secret"
       LOG_LEVEL: INFO
+      CORE_API_URL: https://phones.emf.camp/api
+      CORE_API_TOKEN: secret
+      API_TOKEN: secret
+
+  dect-monitor:
+    image: ghcr.io/emfcamp/phones-omm-sidecars:latest
+    restart: unless-stopped
+    command: dect-monitor
+    volumes:
+      - ./data:/data
+    ports:
+      - 8000:8000
+      - 8081:8081
+    environment:
+      OMM_HOST: omm.phones.emf.camp
+      OMM_USER: dect-monitor
+      OMM_PASS: "secret"
+      LOG_LEVEL: INFO
+      DATA_DIR: /data
+      HTTP_PORT: 8081
+      API_TOKEN: secret
+
+  dect-fun:
+    image: ghcr.io/emfcamp/phones-omm-sidecars:latest
+    restart: unless-stopped
+    command: dect-fun
+    ports:
+      - 8082:8082
+    environment:
+      OMM_HOST: omm.phones.emf.camp
+      OMM_USER: dect-fun
+      OMM_PASS: "secret"
+      LOG_LEVEL: INFO
+      HTTP_PORT: 8082
+      API_TOKEN: secret
+      MESSAGE_TARGET_URL: https://phones.emf.camp/api/message
+      MESSAGE_TARGET_TOKEN: "secret"
