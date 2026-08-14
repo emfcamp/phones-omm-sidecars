@@ -39,7 +39,7 @@ Called by phones-web to notify OMM when a user claims a vanity number or updates
 **Response**
 
 ```json
-// 200 OK — reconciled
+// 200 OK
 {"ok": true}
 ```
 
