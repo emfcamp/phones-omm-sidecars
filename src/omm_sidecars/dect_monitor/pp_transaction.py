@@ -54,7 +54,7 @@ pp_active_1h = Gauge(
 
 
 def _init_db() -> sqlite3.Connection:
-    db_path = os.path.join(os.environ["DATA_DIR"], "pp_transactions.db")
+    db_path = os.path.join(os.environ.get("DATA_DIR", "/data"), "pp_transactions.db")
     log.info("opening sqlite db at %s", db_path)
     db = sqlite3.connect(db_path)
     db.execute("""
