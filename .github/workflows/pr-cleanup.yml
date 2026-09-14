@@ -1,0 +1,35 @@
+name: PR image cleanup
+
+# When a PR closes (merged or not), delete the pr-<number> tag it produced
+# so PR images don't accumulate in GHCR forever.
+
+on:
+  pull_request:
+    types: [closed]
+
+permissions:
+  packages: write
+
+jobs:
+  delete-pr-tag:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Delete pr-${{ github.event.pull_request.number }} from phones-omm-sidecars
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          OWNER: ${{ github.repository_owner }}
+          PKG: phones-omm-sidecars
+          TAG: pr-${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          ids=$(gh api --paginate \
+            "/orgs/$OWNER/packages/container/$PKG/versions" \
+            --jq ".[] | select(.metadata.container.tags[]? == \"$TAG\") | .id" || true)
+          if [ -z "$ids" ]; then
+            echo "Nothing tagged $TAG in $PKG"
+            exit 0
+          fi
+          for id in $ids; do
+            echo "Deleting $PKG version $id ($TAG)"
+            gh api --method DELETE "/orgs/$OWNER/packages/container/$PKG/versions/$id"
+          done

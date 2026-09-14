@@ -1,0 +1,90 @@
+name: Build
+
+# Tags:
+#   latest      - every git tag push
+#   sha-<7>     - every git tag push (pin-able)
+#   <tag name>  - every git tag (e.g. v1.2.3 -> :v1.2.3)
+#   pr-<number> - every push to a pull request (same-repo only; fork PRs
+#                 build but do not push)
+#
+# Plain branch pushes (including to main) do not trigger a build - only
+# git tags and pull requests do.
+
+on:
+  push:
+    tags:
+      - '*'
+  pull_request:
+    types: [opened, synchronize, reopened]
+  workflow_dispatch:
+
+# Cancel superseded PR runs; let tag builds always finish.
+concurrency:
+  group: build-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  attestations: write
+  contents: read
+  packages: write
+
+jobs:
+  build:
+    name: "Docker Build"
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      # Fork PRs get a read-only GITHUB_TOKEN with no package write and no
+      # secrets - build to catch breakage, but skip login/push/cache-export.
+      - id: gate
+        run: |
+          if [ "${{ github.event_name }}" != "pull_request" ] || \
+             [ "${{ github.event.pull_request.head.repo.full_name }}" = "${{ github.repository }}" ]; then
+            echo "push=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "push=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+        with:
+          cache-binary: true
+
+      - name: Login to GitHub Container Registry
+        if: steps.gate.outputs.push == 'true'
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Image metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/emfcamp/phones-omm-sidecars
+          tags: |
+            type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/') }}
+            type=sha,enable=${{ github.event_name != 'pull_request' }}
+            type=ref,event=tag
+            type=ref,event=pr
+
+      - name: Build image
+        id: docker_build
+        uses: docker/build-push-action@v7
+        env:
+          APP_BUILD: ${{ github.sha }}
+          DOCKER_BUILD_RECORD_UPLOAD: false
+          SOURCE_DATE_EPOCH: 0
+        with:
+          push: ${{ steps.gate.outputs.push == 'true' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha # See: https://docs.docker.com/build/cache/backends/gha/
+          cache-to: ${{ steps.gate.outputs.push == 'true' && 'type=gha,mode=max' || '' }}
